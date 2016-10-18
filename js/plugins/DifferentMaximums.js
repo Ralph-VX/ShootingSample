@@ -22,5 +22,5 @@ Kien.DifferentMaximum = {};
 // included.
 
 Game_Party.prototype.maxItems = function(item) {
-    return !!item.meta["Max Amount"] ? parseInt(item.meta["MaxAmount"]) : 99;
+    return !!item.meta["Max Amount"] ? parseInt(item.meta["Max Amount"]) : 99;
 };

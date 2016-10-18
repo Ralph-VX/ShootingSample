@@ -1247,7 +1247,6 @@ AudioManager.saveBgm = function() {
         return this.makeEmptyAudioObject();
     }
 };
-
 AudioManager.saveBgs = function() {
     if (this._currentBgs) {
         var bgs = this._currentBgs;

@@ -29,6 +29,15 @@ Kien.ShootingRPG = {};
  * @desc Default Map id of the map used as battle field.
  * @default 0
  *
+ * @param Battle End Switch ID
+ * @desc Switch Id for the battle end event switch. 0 to disable.
+ * @default 0
+ *
+ * @param Battle Result Variable ID
+ * @desc Variable Id for retrive the result of battle. 0 to disable.
+ * in variable: 0 - Victory, 1 - Aborted(or Escaped), 2 - Defeated.
+ * @default 0
+ *
  * @param Turn Length
  * @desc length in frames of a turn is.
  * @default 600
@@ -36,6 +45,14 @@ Kien.ShootingRPG = {};
  * @param Debug Mode
  * @desc show the rects to represents collision rect.
  * @default false
+ *
+ * @param Single Frame Per Render
+ * @desc only allow one processing frame per render process. 
+ * @default true
+ *
+ * @param Show Score
+ * @desc show the score in battle screen.
+ * @default true
  *
  * @noteParam ShootingProjectileImage
  * @noteRequire 1
@@ -57,6 +74,12 @@ Kien.ShootingRPG = {};
 
  * @requiredAssets img/system/Shot
  * @requiredAssets img/system/hpGauge
+ *
+ * @help
+ * <ShootingProjectileImage:filename>: set the default filename of the shot. Can set on Enemy, Actor and Weapon.
+ * <ShootingAi:funcName>: set the ai function to funcName, or it will be "aiFunc" + enemyId;
+ * <AttackFunc:funcName>: set the attack function of player/weapon.
+ * 
 */
 
 Kien.ShootingRPG.parameters = PluginManager.parameters("ShootingRPG");
@@ -64,8 +87,12 @@ Kien.ShootingRPG.enableDefault = eval(Kien.ShootingRPG.parameters["Enabled Defau
 Kien.ShootingRPG.playerWidth = parseFloat(Kien.ShootingRPG.parameters["Player Bound Width"], 10);
 Kien.ShootingRPG.playerHeight = parseFloat(Kien.ShootingRPG.parameters["Player Bound Height"], 10);
 Kien.ShootingRPG.battleMapId = parseInt(Kien.ShootingRPG.parameters["Battle Map ID"], 10);
+Kien.ShootingRPG.battleEndSwitchId = parseInt(Kien.ShootingRPG.parameters["Battle End Switch ID"], 10);
+Kien.ShootingRPG.battleResultVariableId = parseInt(Kien.ShootingRPG.parameters["Battle Result Variable ID"], 10);
 Kien.ShootingRPG.turnLength = parseInt(Kien.ShootingRPG.parameters["Turn Length"], 10);
 Kien.ShootingRPG.debugMode = eval(Kien.ShootingRPG.parameters["Debug Mode"]);
+Kien.ShootingRPG.limitProcess = eval(Kien.ShootingRPG.parameters["Single Frame Per Render"]);
+Kien.ShootingRPG.showScore = eval(Kien.ShootingRPG.parameters["Show Score"]);
 
 
 if (Kien.ShootingRPG.battleMapId === 0) {
@@ -361,6 +388,36 @@ SceneManager.isNextScene = function(sceneClass) {
     return Kien.ShootingRPG.SceneManager_isNextScene.call(this, sceneClass);
 };
 
+SceneManager.updateMain = function() {
+    if (Utils.isMobileSafari()) {
+        this.changeScene();
+        this.updateScene();
+    } else {
+        var newTime = this._getTimeInMs();
+        var fTime = (newTime - this._currentTime) / 1000;
+        if (fTime > 0.25) fTime = 0.25;
+        this._currentTime = newTime;
+        this._accumulator += fTime;
+        if (Kien.ShootingRPG.limitProcess) {
+            if (this._accumulator >= this._deltaTime) {
+                this.updateInputData();
+                this.changeScene();
+                this.updateScene();
+                this._accumulator -= this._deltaTime;
+            }
+        } else {
+            while (this._accumulator >= this._deltaTime) {
+                this.updateInputData();
+                this.changeScene();
+                this.updateScene();
+                this._accumulator -= this._deltaTime;
+            }
+        }
+    }
+    this.renderScene();
+    this.requestUpdate();
+};
+
 //-----------------------------------------------------------------------------
 // BattleManager
 //
@@ -374,6 +431,7 @@ BattleManager.setup = function(troopId, canEscape, canLose) {
             this._shootingPlayer = new Game_Player();
             this._shootingPlayer._direction = 8;
             this._shootingPlayer._directionFix = true;
+            this._shootingPlayer.setTransparent(false);
             this._shootingPlayer.isDashing = function() {return true};
         }
         if (!this._shootingMap) {
@@ -414,6 +472,7 @@ BattleManager.createBattlers = function() {
         $gamePlayer._directionFix = true;
     }
     this.extra = new Game_ShootingCharacter();
+    this.subEnemies = [];
 }
 
 BattleManager.revertGameObject = function() {
@@ -434,8 +493,9 @@ BattleManager.isBusy = function() {
 
 Kien.ShootingRPG.BattleManager_update = BattleManager.update;
 BattleManager.update = function() {
-    if (!this.isBusy() && !this.updateEvent()) {
-		if ($gameSystem._shootingRPGEnabled) {
+    if ($gameSystem._shootingRPGEnabled) {
+        if (!this.isBusy() && !this.updateEvent() && !$gameMap.isEventRunning()) {
+            $gameSystem._shootingRPGNearmiss = false;
             this._shootingMap.update(SceneManager._scene.isActive());
             this.updateBattler();
 			this._turnCount++;
@@ -444,12 +504,21 @@ BattleManager.update = function() {
                 this.endTurn();
             }
             if (this.isBattleEnd()) {
-                this.updateBattleEnd();
+                if ($gameSystem._shootingRPGBattleEndSwitchId > 0) {
+                    if (this._battleEnded && !$gameSwitches.value($gameSystem._shootingRPGBattleEndSwitchId)) {
+                        this.updateBattleEnd()
+                    } else {
+                        $gameSwitches.setValue($gameSystem._shootingRPGBattleEndSwitchId, true);
+                        this._battleEnded = true;
+                    }
+                } else {
+                    this.updateBattleEnd();
+                }
             }
-		} else {
-			Kien.ShootingRPG.BattleManager_update.call(this);
-		}
-    }
+		} 
+    }else {
+		Kien.ShootingRPG.BattleManager_update.call(this);
+	}
 };
 
 BattleManager.updateBattler = function() {
@@ -493,11 +562,24 @@ Kien.ShootingRPG.BattleManager_startBattle = BattleManager.startBattle;
 BattleManager.startBattle = function() {
     if ($gameSystem._shootingRPGEnabled) { 
         this._phase = 'start';
+        this._turnCount = 0;
+        this._battleEnded = false;
+        if ($gameSystem._shootingRPGBattleEndSwitchId > 0) {
+            $gameSwitches.setValue($gameSystem._shootingRPGBattleEndSwitchId, false);
+        }
         $gameSystem.onBattleStart();
         $gameParty.onBattleStart();
         $gameTroop.onBattleStart();
     } else {
         Kien.ShootingRPG.BattleManager_startBattle.apply(this, arguments);
+    }
+};
+
+Kien.ShootingRPG.BattleManager_endBattle = BattleManager.endBattle;
+BattleManager.endBattle = function(result) {
+    Kien.ShootingRPG.BattleManager_endBattle.call(this, result);
+    if ($gameSystem._shootingRPGBattleResultVariableId > 0) {
+        $gameVariables.setValue($gameSystem._shootingRPGBattleResultVariableId, result);
     }
 };
 
@@ -516,6 +598,14 @@ BattleManager.getBattlerFromEvent = function(e) {
     }
 }
 
+BattleManager.playerMember = function() {
+    return [this.player];
+}
+
+BattleManager.enemyMember = function() {
+    return this.enemies.concat(this.subEnemies);
+}
+
 BattleManager.playerHp = function() {
     return $gameParty.leader().hp;
 }
@@ -526,6 +616,24 @@ BattleManager.enemyHp = function() {
         sum += $gameTroop.members()[n].hp;
     }
     return sum;
+}
+
+BattleManager.addSubEnemy = function(obj) {
+    var i = this.subEnemies.findIndex(function(o) {return o._src == obj.src});
+    if (i >= 0) {
+        this.subEnemies.splice(i,1);
+    }
+    this.subEnemies.push(new Game_ShootingSubEnemy(obj));
+}
+
+BattleManager.removeSubEnemy = function(obj) {
+    if (!!obj.src) {
+        obj = obj.src;
+    }
+    var i = this.subEnemies.findIndex(function(o) {return o._src == obj});
+    if (i >= 0) {
+        this.subEnemies.splice(i,1);
+    }
 }
 
 BattleManager.displayVictoryMessage = function() {
@@ -563,6 +671,11 @@ Game_System.prototype.initialize = function() {
     this._shootingRPGEnabled = Kien.ShootingRPG.enableDefault;
     this._shootingRPGBattleMapId = Kien.ShootingRPG.battleMapId;
     this._shootingRPGTurnLength = Kien.ShootingRPG.turnLength;
+    this._shootingRPGShowScore = Kien.ShootingRPG.showScore;
+    this._shootingRPGBattleEndSwitchId = Kien.ShootingRPG.battleEndSwitchId;
+    this._shootingRPGBattleResultVariableId = Kien.ShootingRPG.battleResultVariableId;
+    this._shootingRPGNearmiss = false;
+    this._shootingRPGScore = 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -628,9 +741,11 @@ Game_ShootingCharacter.prototype.update =function() {
     this.updateProjectiles();
 }
 
-Game_ShootingCharacter.prototype.addProjectile = function(obj) {
-    this._projectiles.push(obj);
-    this._addedProjectile.push(obj);
+Game_ShootingCharacter.prototype.addProjectile = function(projectileName, initFunc) {
+    var proj = new (eval(projectileName))();
+    initFunc.call(this, proj, Array.prototype.slice.call(arguments, 2));
+    this._projectiles.push(proj);
+    this._addedProjectile.push(proj);
 }
 
 Game_ShootingCharacter.prototype.checkCollision = function() {
@@ -711,22 +826,73 @@ Game_ShootingPlayer.prototype.updateMovement = function() {
 
 Game_ShootingPlayer.prototype.updateAttack = function() {
     if (Input.isPressed('ok') && this._waitCount == 0) {
-        var initFunc = function(proj) {
-            proj.setPosition(this._character.x, this._character.y);
-            proj._damage = this.battler().atk;
-            proj._vec._y = -0.125;
-            proj._opposite = BattleManager.enemies;
-        }
-        this.addProjectile("Game_ShootingProjectileStraight", initFunc);
-        this._waitCount = 8;
+        this.callAttackFunction();
     }
     this._waitCount = Math.max(this._waitCount - 1, 0);
 }
 
-Game_ShootingPlayer.prototype.addProjectile = function(projectileName, initFunc) {
-    var proj = new (eval(projectileName))();
-    initFunc.call(this, proj);
-    Game_ShootingCharacter.prototype.addProjectile.call(this, proj);
+Game_ShootingPlayer.prototype.callAttackFunction = function() {
+    var bat = this.battler();
+    if (!! bat.weapons()[0] && !!bat.weapons()[0].meta["AttackFunc"] && !!this[bat.weapons()[0].meta["AttackFunc"]]) {
+        this[bat.weapons()[0].meta["AttackFunc"]].call(this);
+    } else if (!!bat.actor().meta["AttackFunc"] && !!this[bat.actor().meta["AttackFunc"]]) {
+        this[bat.actor().meta["AttackFunc"]].call(this);
+    }
+}
+
+Game_ShootingPlayer.prototype.setProjectileProperty = function(proj) {
+    proj.setPosition(this._character.x, this._character.y);
+    proj._damage = this.battler().atk;
+    proj._vec = new Kien.Vector2D(0,-1);
+    proj._opposite = BattleManager.enemyMember.bind(BattleManager);
+    proj._owner = this;
+}
+
+Game_ShootingPlayer.prototype.machineGunAttackFunc = function() {
+    var initFunc = function(proj) {
+        this.setProjectileProperty(proj);
+        proj._vec.turn(Math.random()*Math.PI/9 - Math.PI/18);
+        proj._vec.setMagnitude(0.125);
+    }.bind(this);
+    this.addProjectile("Game_ShootingProjectileStraight", initFunc);
+    this._waitCount = 5;
+}
+
+Game_ShootingPlayer.prototype.shotGunAttackFunc = function() {
+    var initFunc = function(proj) {
+        this.setProjectileProperty(proj);
+        proj._vec.setMagnitude(Math.random() * 0.1 + 0.06);
+        proj._vec.turn(Math.random()*Math.PI/6 - Math.PI/12);
+        proj._projectileHue = Math.random() * 360;
+        proj._damage *= 0.85;
+    }.bind(this);
+    for (var n = 0; n < 15; n++) {
+        this.addProjectile("Game_ShootingProjectileStraight", initFunc);
+    }
+    this._waitCount = 60;
+}
+
+Game_ShootingPlayer.prototype.splitGunAttackFunc = function() {
+    var initFunc = function(proj) {
+        proj.childFunc = function(proj2, args) {
+            this.setProjectileProperty(proj2);
+            proj2.setAngle(args[0], args[1]);
+            proj._damage *= 0.25;
+        };
+        this.setProjectileProperty(proj);
+        proj._projectileName = "Shot3";
+        proj._damage *= 0.4;
+        proj._vec.setMagnitude(0.125);
+        proj._acc = proj._vec.clone().applyMagnitude(-0.01);
+        proj.onFinish = function() {
+            for (var n = 0; n <= 360; n += 20) {
+                this.addProjectile("Game_ShootingProjectileStraight", this.childFunc.bind(this), Math.deg2Rad(n), 0.1);
+            }
+        }.bind(proj);
+        proj._pierce = 2;
+    }.bind(this);
+    this.addProjectile("Game_ShootingProjectileStraight", initFunc);
+    this._waitCount = 60;
 }
 
 //-----------------------------------------------------------------------------
@@ -749,6 +915,7 @@ Game_ShootingEnemy.prototype.initialize = function(event) {
     this._noteBound = null;
     this._aiFuncName = null;
     this._difVec = new Kien.Vector2D(0,0);
+    this._size = 1;
     this.setupEnemy();
 }
 
@@ -780,15 +947,15 @@ Game_ShootingEnemy.prototype.updateMovement = function() {
     var lx = this.x;
     var ly = this.y;
     this._lastBoundbox = this._boundbox.clone();
-    this._boundbox.x = this._character.x - this._enemyWidth/2;
-    this._boundbox.y = this._character.y - this._enemyHeight;
-    this._boundbox.width = this._enemyWidth;
-    this._boundbox.height = this._enemyHeight;
+    this._boundbox.x = this._character.x - (this._enemyWidth/2) * this._size;
+    this._boundbox.y = this._character.y - (this._enemyHeight) * this._size;
+    this._boundbox.width = this._enemyWidth * this._size;
+    this._boundbox.height = this._enemyHeight * this._size;
     if (this._noteBound) {
-        this._boundbox.x += this._noteBound.x;
-        this._boundbox.y += this._noteBound.y;
-        this._boundbox.width = this._noteBound.width;
-        this._boundbox.height = this._noteBound.height;
+        this._boundbox.x += this._noteBound.x * this._size;
+        this._boundbox.y += this._noteBound.y * this._size;
+        this._boundbox.width = this._noteBound.width * this._size;
+        this._boundbox.height = this._noteBound.height * this._size;
     }
     this._difVec.x = this.x - lx;
     this._difVec.y = this.y - ly;
@@ -825,20 +992,19 @@ Game_ShootingEnemy.prototype.setupEnemyInfo = function() {
             this._noteBound.width = this._noteBound.width / $gameMap.tileWidth();
             this._noteBound.height = this._noteBound.height / $gameMap.tileHeight();
         }
+        if (this._enemy.enemy().meta["ShootingSize"]) {
+            this._size = parseFloat(this._enemy.enemy().meta["ShootingSize"]);
+        }
     }
-}
-
-Game_ShootingEnemy.prototype.addProjectile = function(projectileName, initFunc) {
-    var proj = new (eval(projectileName))();
-    initFunc.call(this, proj, Array.prototype.slice.call(arguments, 2));
-    Game_ShootingCharacter.prototype.addProjectile.call(this, proj);
 }
 
 Game_ShootingEnemy.prototype.setProjectileProperty = function(proj) {
     proj._damage = this.battler().atk;
-    proj._opposite = [BattleManager.player];
+    proj._opposite = BattleManager.playerMember.bind(BattleManager);
     proj._projectileName = this._enemy.enemy().meta["ShootingProjectileImage"] || proj._projectileName;
     proj.setPosition(this.x, this.y);
+    proj._checkNearmiss = true;
+    proj._owner = this;
 }
 
 Game_ShootingEnemy.prototype.getPlayerVector = function() {
@@ -848,7 +1014,9 @@ Game_ShootingEnemy.prototype.getPlayerVector = function() {
 }
 
 Game_ShootingEnemy.prototype.applyDamage = function(value) {
+    var chp = this.battler().hp;
     Game_ShootingCharacter.prototype.applyDamage.call(this, value);
+    $gameSystem._shootingRPGScore += Math.round(chp - this.battler().hp) * 10;
     if (this.battler().isDead()) {
         $gameSelfSwitches.setValue([this._character._mapId, this._character._eventId, "A"], true);
     }
@@ -904,7 +1072,7 @@ Game_ShootingEnemy.prototype.testAiFunc3 = function() {
             proj._projectileHue = 90;
             proj.setTarget(BattleManager.player, 0.1);
         }
-        //this.addProjectile("Game_ShootingProjectileWave", initFunc2);
+        this.addProjectile("Game_ShootingProjectileStraight", initFunc2);
         this._waitCount = 15;
         this._angle = (this._angle + 10) % 360;
     } else {
@@ -960,6 +1128,96 @@ Game_ShootingEnemy.prototype.testAiFunc5 = function() {
     }
 }
 
+Game_ShootingEnemy.prototype.testAiFunc6 = function() {
+    this._waitCount = this._waitCount || 0;
+    if (this._waitCount == 0) {
+        var initFunc = function(proj, args) {
+            this.setProjectileProperty(proj);
+            proj._vec.x = 0;
+            proj._vec.y = 2 * args[0];
+            proj._vec.setMagnitude(0.5);
+            proj._vecChange = Math.PI/2;
+            proj._changeTime = Math.floor(Math.PI / proj._vecChange);
+            proj.oldUpdate = proj.updateMovement;
+            proj.updateMovement = function() {
+                this._vec.turn(this._vecChange, -1);
+                //this._vec.setMagnitude(this._vec.magnitude);
+                if (this._changeTime == 0) {
+                    this._vecChange *= 0.8;
+                    this._changeTime = Math.floor(Math.PI / proj._vecChange);;
+                } else {
+                    this._changeTime--;
+                }
+                this.oldUpdate();
+            }
+            proj.isValid = function() {
+                return Math.sqrt((Math.pow(this.realX(), 2) + Math.pow(this.realY(), 2))) < 100;
+            }
+        }
+        this.addProjectile("Game_ShootingProjectileStraight", initFunc, 1);
+        this.addProjectile("Game_ShootingProjectileStraight", initFunc, -1);
+        this._waitCount = 60;
+    } else {
+        this._waitCount--;
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Game_ShootingSubEnemy
+//
+// The game object for event generated enemy object.
+
+function Game_ShootingSubEnemy() {
+    this.initialize.apply(this, arguments);
+}
+
+Game_ShootingSubEnemy.prototype = Object.create(Game_ShootingCharacter.prototype);
+Game_ShootingSubEnemy.prototype.constructor = Game_ShootingSubEnemy;
+
+Game_ShootingSubEnemy.prototype.initialize = function(obj) {
+    Game_ShootingCharacter.prototype.initialize.call(this);
+    this._boundbox = obj.boundbox;
+    this._lastBoundbox = this._boundbox.clone();
+    this._difVec = new Kien.Vector2D(0,0);
+    this._onDead = obj.ondead;
+    this._onDamage = obj.ondamage;
+    this._src = obj.src;
+    this._hp = obj.hp;
+    this._def = obj.def;
+}
+
+Game_ShootingSubEnemy.prototype.difVec = function() {
+    return this._difVec;
+}
+
+Game_ShootingSubEnemy.prototype.update = function() {
+    Game_ShootingCharacter.prototype.update.call(this);
+    this.updatePosition();
+}
+
+Game_ShootingSubEnemy.prototype.updatePosition = function() {
+    var lx = this.x;
+    var ly = this.y;
+    this._boundbox.x = this._src.x - this._boundbox.width/2;
+    this._boundbox.y = this._src.y - this._boundbox.height;
+    this._difVec.x = this.x - lx;
+    this._difVec.y = this.y - ly;
+}
+
+Game_ShootingSubEnemy.prototype.exists = function() {
+    return this._hp > 0;
+}
+
+Game_ShootingSubEnemy.prototype.applyDamage = function(value) {
+    value = value * (1-(this._def/(100+this._def)));
+    this._hp -= value;
+    if (!this.exists()) {
+        this._onDead();
+    } else {
+        this._onDamage();
+    }
+}
+
 //-----------------------------------------------------------------------------
 // Game_ShootingProjectileBase
 //
@@ -969,6 +1227,16 @@ function Game_ShootingProjectileBase() {
     this.initialize.apply(this, arguments);
 }
 
+Object.defineProperty(Game_ShootingProjectileBase.prototype, 'x', {
+    get: function() {return this.realX()},
+    configurable: true
+})
+
+Object.defineProperty(Game_ShootingProjectileBase.prototype, 'y', {
+    get: function() {return this.realY()},
+    configurable: true
+})
+
 Game_ShootingProjectileBase.prototype.initialize = function() {
     this._boundDx = -0.05;
     this._boundDy = -0.05;
@@ -977,15 +1245,21 @@ Game_ShootingProjectileBase.prototype.initialize = function() {
     this._projectileName = "Shot";
     this._projectileHue = 0;
     this._finish = false;
-    this._opposite = [];
+    this._opposite = function() {return []};
     this._damage = 0;
-    this._pierce = 0;
+    this._pierce = 1;
     this._hit = {};
     this._hitIndex = [];
+    this._checkNearmiss = false;
+    this._owner = null;
 }
 
 Game_ShootingProjectileBase.prototype.isFinish = function() {
     return this._finish;
+}
+
+Game_ShootingProjectileBase.prototype.isValid = function() {
+    return $gameMap.isValid(this.realX(),this.realY());
 }
 
 Game_ShootingProjectileBase.prototype.update = function() {
@@ -1002,6 +1276,16 @@ Game_ShootingProjectileBase.prototype.difVec = function() {
 
 Game_ShootingProjectileBase.prototype.updateMovement = function() {
     this._lastBoundbox = this._boundbox.clone();
+    if (!this.isValid()) {
+        this._finish = true;
+        this.onFinish();
+        return;
+    }
+    if (this.difVec().magnitude <= 0.0001) {
+        this._finish = true;
+        this.onFinish();
+        return;
+    }
 }
 
 Game_ShootingProjectileBase.prototype.updateHitted = function() {
@@ -1032,6 +1316,15 @@ Game_ShootingProjectileBase.prototype.updateCollision = function() {
             this.onCollide(t);
             if (this.isFinish()) {
                 return;
+            }
+        } else {
+            if (this._checkNearmiss) {
+                var dis = this._boundbox.radius + t._boundbox.radius + 0.09;
+                var dv = Kien.Vector2D.getDisplacementVector(this.x, this.y, t.x, t.y);
+                if (this._checkNearmiss && this.difVec().dot(dv) <= 0.01 && dv.magnitude <= dis) {
+                    $gameSystem._shootingRPGScore += 100;
+                    $gameSystem._shootingRPGNearmiss = true;
+                }
             }
         }
     }
@@ -1087,7 +1380,7 @@ Game_ShootingProjectileBase.prototype.positionRect = function() {
 }
 
 Game_ShootingProjectileBase.prototype.opposites = function() {
-    return this._opposite;
+    return this._opposite.call();
 }
 
 Game_ShootingProjectileBase.prototype.projectileImage = function() {
@@ -1136,17 +1429,37 @@ Game_ShootingProjectileBase.prototype.realY = function() {
 Game_ShootingProjectileBase.prototype.onCollide = function(target) {
     var battler = target.battler();
     if (!this._hit[battler] && !battler.isDead()){
-        target.applyDamage(this._damage);
+        var damage = this.modifyDamage(battler);
+        target.applyDamage(damage);
         this._pierce--;
         if (this._pierce > 0) {
             this._hit[battler] = {x : this.realX(), y : this.realY(), dur: 10};
             this._hitIndex.push(battler);
         } else {
             this._finish = true;
+            this.onFinish();
         }
     }
 }
 
+Game_ShootingProjectileBase.prototype.modifyDamage = function(battler) {
+    return this._damage;
+}
+
+Game_ShootingProjectileBase.prototype.onFinish = function() {
+
+}
+
+Game_ShootingProjectileBase.prototype.addProjectile = function(projectileName, initFunc) {
+    if (!!this._owner) {
+        this._owner.addProjectile.apply(this._owner, arguments);
+    }
+}
+
+Game_ShootingProjectileBase.prototype.setProjectileProperty = function(proj) {
+    this._owner.setProjectileProperty(proj);
+    proj.setPosition(this.x, this.y);
+}
 
 //-----------------------------------------------------------------------------
 // Game_ShootingProjectileStraight
@@ -1163,6 +1476,7 @@ Game_ShootingProjectileStraight.prototype.constructor = Game_ShootingProjectileS
 Game_ShootingProjectileStraight.prototype.initialize = function() {
     Game_ShootingProjectileBase.prototype.initialize.call(this);
     this._vec = new Kien.Vector2D(0,0);
+    this._acc = new Kien.Vector2D(0,0);
 }
 
 Game_ShootingProjectileStraight.prototype.updateMovement = function() {
@@ -1170,10 +1484,10 @@ Game_ShootingProjectileStraight.prototype.updateMovement = function() {
     if (this._vec.magnitude > 0) {
         this._boundbox.x += this._vec.x;
         this._boundbox.y += this._vec.y;
-    }
-    if (!$gameMap.isValid(this.realX(),this.realY())) {
-        this._finish = true;
-        return;
+        if (this._acc.magnitude > 0) {
+            this._vec.x += this._acc.x;
+            this._vec.y += this._acc.y;
+        }
     }
 }
 
@@ -1280,6 +1594,27 @@ Game_ShootingProjectileWave.prototype.difVec = function() {
 }
 
 //-----------------------------------------------------------------------------
+// Game_Event
+//
+// The game object class for an event. It contains functionality for event page
+// switching and running parallel process events.
+
+Game_Event.prototype.createSubEnemy = function(boxwidth, boxheight, isActor, thp, tdef, tonDead, tonDamage) {
+    return {
+        src: this,
+        boundbox: new Rectangle(this.x-boxwidth/2, this.y-boxheight, boxwidth, boxheight),
+        hp: thp,
+        def: tdef,
+        ondead: tonDead || function() {$gameSelfSwitches.setValue([this._mapId, this._eventId, "A"], true); BattleManager.removeSubEnemy(this)}.bind(this),
+        ondamage: tonDamage || function() {isActor ? SoundManager.playActorDamage() : SoundManager.playEnemyDamage();},
+        isactor: isActor
+    }
+}
+
+Game_Event.prototype.addSubEnemy = function(boxwidth, boxheight, isActor, thp, tdef, tonDead, tonDamage) {
+    BattleManager.addSubEnemy(this.createSubEnemy.apply(this, arguments));
+}
+//-----------------------------------------------------------------------------
 // Game_Interpreter
 //
 // The interpreter for running event commands.
@@ -1329,7 +1664,7 @@ Game_Interpreter.prototype.event = function(param) {
     } else if (this.isOnCurrentMap()) {
         return $gameMap.event(param > 0 ? param : this._eventId);
     } else {
-        return $gameMap.event(this._eventId);
+        return undefined;
     }
 }
 
@@ -1337,6 +1672,17 @@ Game_Interpreter.prototype.battler = function(param) {
     return BattleManager.getBattlerFromEvent(this.event(param));
 }
 
+Game_Interpreter.prototype.character = function(param) {
+    if ($gameParty.inBattle() && !$gameSystem._shootingRPGEnabled) {
+        return null;
+    } else if (param < 0) {
+        return $gamePlayer;
+    } else if (this.isOnCurrentMap()) {
+        return $gameMap.event(param > 0 ? param : this._eventId);
+    } else {
+        return null;
+    }
+};
 
 //-----------------------------------------------------------------------------
 // Sprite_ShootingPlayer
@@ -1454,6 +1800,8 @@ Sprite_ShootingEnemy.prototype.updatePosition = function() {
 Sprite_ShootingEnemy.prototype.updateHome = function() {
     this._homeX = this._battler.screenX();
     this._homeY = this._battler.screenY(); 
+    this.scale.x = this._character._size;
+    this.scale.y = this._character._size;
 }
 
 Sprite_ShootingEnemy.prototype.updateColorTone = function() {
@@ -1514,6 +1862,50 @@ Sprite_ShootingEnemy.prototype.updateBlink = function() {
 Sprite_ShootingEnemy.prototype.onRemoved = function() {
     if (!!this._debugSprite) {
         this._debugSprite.parent.removeChild(this._debugSprite);
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Sprite_ShootingExtra
+//
+// Use to show extra projectiles.
+
+function Sprite_ShootingExtra() {
+    this.initialize.apply(this, arguments);
+}
+
+Sprite_ShootingExtra.prototype = Object.create(Sprite_Base.prototype);
+Sprite_ShootingExtra.prototype.constructor = Sprite_ShootingExtra;
+
+Sprite_ShootingExtra.prototype.initialize = function() {
+    Sprite_Base.prototype.initialize.call(this);
+    this._character = BattleManager.extra;
+    this._projectiles = [];
+    this.once("removed", this.onRemoved, this);
+}
+
+Sprite_ShootingExtra.prototype.update = function() {
+    Sprite_Base.prototype.update.call(this);
+    this.updateProjectile();
+}
+
+Sprite_ShootingExtra.prototype.updateProjectile = function() {
+    for (var n = 0; n < this._character._addedProjectile.length; n++) {
+        var projectile = this._character._addedProjectile[n];
+        var sprite = new Sprite_ShootingProjectile(projectile);
+        this._projectiles.push(sprite);
+        this.parent.addChild(sprite);
+    }
+    this._character._addedProjectile.clear();
+    var callback = function(s) {
+        return s._finish;
+    }
+    var i = this._projectiles.findIndex(callback);
+    while (i >= 0) {
+        var sprite = this._projectiles[i];
+        this.parent.removeChild(sprite);
+        this._projectiles.splice(i, 1);
+        i = this._projectiles.findIndex(callback);
     }
 }
 
@@ -1707,6 +2099,95 @@ Sprite_ShootingHpGauge.prototype.updateGaugeContent = function() {
 }
 
 //-----------------------------------------------------------------------------
+// Sprite_ShootingScore
+//
+// The sprite for displaying score.
+
+function Sprite_ShootingScore() {
+    this.initialize.apply(this, arguments);
+}
+
+Sprite_ShootingScore.prototype = Object.create(Sprite_Base.prototype);
+Sprite_ShootingScore.prototype.constructor = Sprite_ShootingScore;
+
+Sprite_ShootingScore.prototype.initialize = function() {
+    Sprite_Base.prototype.initialize.call(this);
+    this._lastNearmiss = false;
+    this._nearmissCount = 0;
+    this._lastScore = -1;
+    this._stringWidth = -1;
+    this._scoreWidth = -1;
+    this.createNearmissSprite();
+    this.createBitmap();
+}
+
+Sprite_ShootingScore.prototype.createNearmissSprite = function() {
+    this._nearmissSprite = new Sprite();
+    this._nearmissSprite.bitmap = new Bitmap(ImageManager.loadEmptyBitmap().measureTextWidth("NEARMISS!"), 30);
+    this._nearmissSprite.bitmap.drawText("NEARMISS!",0,0,this._nearmissSprite.bitmap.width, 30);
+    this._nearmissSprite.opacity = 0;
+    this.addChild(this._nearmissSprite);
+}
+
+Sprite_ShootingScore.prototype.createBitmap = function() {
+    this.bitmap = new Bitmap(128, 30);
+    this._titleSprite = new Sprite();
+    this._titleSprite.bitmap = new Bitmap(128,30);
+    this._titleSprite.bitmap.drawText("Score",0,0,128,30,"center");
+    this._stringWidth = this.bitmap.measureTextWidth("Score");
+    this._titleSprite.y = -30;
+    this.addChild(this._titleSprite);
+}
+
+Sprite_ShootingScore.prototype.update = function() {
+    Sprite_Base.prototype.update.call(this);
+    this.updateBitmap();
+    this.updateEffect();
+    this.updateNearmiss();
+}
+
+Sprite_ShootingScore.prototype.updateBitmap = function() {
+    if ($gameSystem._shootingRPGScore != this._lastScore) {
+        this._lastScore = $gameSystem._shootingRPGScore;
+        this.bitmap.clear();
+        this.bitmap.drawText(Math.round(this._lastScore).toString(),0,0,128,30,"center");
+        this._scoreWidth = this.bitmap.measureTextWidth(Math.round(this._lastScore).toString());
+        this.scale.x = 1.3;
+        this.scale.y = 1.3;
+    }
+}
+
+Sprite_ShootingScore.prototype.updateEffect = function() {
+    if (Math.abs(this.scale.x - 1) >= 0.001) {
+        this.scale.x *= 0.9;
+        this.scale.y *= 0.9;
+        if ((this.scale.x - 1) <= 0.001) {
+            this.scale.x = 1;
+            this.scale.y = 1;
+        }
+    }
+}
+
+Sprite_ShootingScore.prototype.updateNearmiss = function() {
+    this._nearmissSprite.x = Math.max(this._stringWidth, this._scoreWidth) + this._nearmissSprite.width/2;
+    this._nearmissSprite.y = -15;
+    if ($gameSystem._shootingRPGNearmiss != this._lastNearmiss) {
+        if (!this._lastNearmiss) {
+            this._nearmissSprite.opacity = 255;
+            this._nearmissCount = 15;
+        }
+        this._lastNearmiss = $gameSystem._shootingRPGNearmiss;
+    }
+    if (!this._lastNearmiss && this._nearmissCount != 0) {
+        this._nearmissSprite.opacity = 255 * (this._nearmissCount / 15);
+        this._nearmissCount--
+        if (this._nearmissCount == 0) {
+            this._nearmissSprite.opacity = 0;
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
 // Spriteset_Shooting
 //
 // The set of sprites on the map screen.
@@ -1721,6 +2202,18 @@ Spriteset_Shooting.prototype.constructor = Spriteset_Shooting;
 Spriteset_Shooting.prototype.initialize = function() {
     Spriteset_Map.prototype.initialize.call(this);
 };
+
+Spriteset_Shooting.prototype.createUpperLayer = function() {
+    Spriteset_Map.prototype.createUpperLayer.call(this);
+    this.createScoreSprite();
+};
+
+Spriteset_Shooting.prototype.createScoreSprite = function() {
+    this._scoreSprite = new Sprite_ShootingScore();
+    this._scoreSprite.x = 30;
+    this._scoreSprite.y = 60;
+    this.addChild(this._scoreSprite);
+}
 
 Spriteset_Shooting.prototype.createCharacters = function() {
     this._characterSprites = [];
@@ -1744,6 +2237,7 @@ Spriteset_Shooting.prototype.createBattlers = function() {
     for (var i = 0; i < BattleManager.enemies.length; i++) {
         this._battlerSprites.push(new Sprite_ShootingEnemy(BattleManager.enemies[i]));
     }
+    this._battlerSprites.push(new Sprite_ShootingExtra());
     for (var n = 0; n < this._battlerSprites.length; n++) {
         this.addChild(this._battlerSprites[n]);
     }
@@ -1768,6 +2262,7 @@ Scene_BattleShooting.prototype.constructor = Scene_BattleShooting;
 
 Scene_BattleShooting.prototype.initialize = function() {
     Scene_Base.prototype.initialize.call(this);
+    this._pause = false;
 };
 
 Scene_BattleShooting.prototype.isReady = function() {
@@ -1794,6 +2289,10 @@ Scene_BattleShooting.prototype.start = function() {
 };
 
 Scene_BattleShooting.prototype.update = function() {
+    this.updatePause();
+    if (this._pause) {
+        return;
+    }
     var active = this.isActive();
     BattleManager.update();
     $gameMap.update(active);
@@ -1802,6 +2301,13 @@ Scene_BattleShooting.prototype.update = function() {
     $gameScreen.update();
     Scene_Base.prototype.update.call(this);
 };
+
+Scene_BattleShooting.prototype.updatePause = function() {
+    if (Input.isTriggered("cancel")) {
+        this._pause = !this._pause;
+        SoundManager.playCancel();
+    }
+}
 
 Scene_BattleShooting.prototype.stop = function() {
     Scene_Base.prototype.stop.call(this);
@@ -1884,4 +2390,8 @@ Scene_Map.prototype.updateEncounter = function() {
     } else {
         Kien.ShootingRPG.Scene_Map_updateEncounter.call(this);
     }
+};
+
+Scene_Map.prototype.isFastForward = function() {
+    return false;
 };

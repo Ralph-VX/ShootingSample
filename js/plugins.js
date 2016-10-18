@@ -3,5 +3,7 @@
 var $plugins =
 [
 {"name":"PixelMovement","status":true,"description":"Magic Tower System bundle. Can be on/off.","parameters":{"Enabled Default":"true","Player Size Width":"0.7","Player Size Height":"0.7","Debug Mode":"false"}},
-{"name":"ShootingRPG","status":true,"description":"A system allow battle become Shooting. Can be on/off.","parameters":{"Enabled Default":"true","Player Bound Width":"0.1","Player Bound Height":"0.1","Battle Map ID":"2","Turn Length":"60","Debug Mode":"false"}}
+{"name":"ShootingRPG","status":true,"description":"A system allow battle become Shooting. Can be on/off.","parameters":{"Enabled Default":"true","Player Bound Width":"0.1","Player Bound Height":"0.1","Battle Map ID":"2","Battle End Switch ID":"20","Battle Result Variable ID":"20","Turn Length":"60","Debug Mode":"false","Single Frame Per Render":"true","Show Score":"true"}},
+{"name":"patchforthisgame","status":true,"description":"","parameters":{}},
+{"name":"DifferentMaximums","status":true,"description":"A system allow you to set your items maximum amount.","parameters":{}}
 ];
