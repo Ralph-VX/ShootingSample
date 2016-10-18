@@ -1599,6 +1599,17 @@ Game_ShootingProjectileWave.prototype.difVec = function() {
 // The game object class for an event. It contains functionality for event page
 // switching and running parallel process events.
 
+Kien.ShootingRPG.Game_Event_initialize = Game_Event.prototype.initialize;
+Game_Event.prototype.initialize = function(mapId, eventId) {
+    this._eventData = $dataMap.events[eventId];
+    Kien.ShootingRPG.Game_Event_initialize.call(this, mapId, eventId);
+};
+
+
+Game_Event.prototype.event = function() {
+    return this._eventData;
+};
+
 Game_Event.prototype.createSubEnemy = function(boxwidth, boxheight, isActor, thp, tdef, tonDead, tonDamage) {
     return {
         src: this,
