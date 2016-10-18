@@ -124,6 +124,13 @@ if (!Rectangle.prototype.cx) {
         configurable: true
     });
 
+    Object.defineProperty(Rectangle.prototype, 'radius', {
+        get: function() {
+            return Math.sqrt(Math.pow(this.cx-this.x,2) + Math.pow(this.cy-this.y,2));
+        },
+        configurable: true
+    })
+
     Rectangle.prototype.side = function(direction) {
         switch(direction) {
             case 2:
@@ -337,7 +344,7 @@ Game_CharacterBase.prototype.setPosition = function(x, y) {
 };
 
 Game_CharacterBase.prototype.moveStraight = function(d, dis) {
-    dis = dis || this.defaultMoveAmount();
+    dis = dis !== undefined ? dis : this.defaultMoveAmount();
     this.setMovementSuccess(this.canPass(this._x, this._y, d, dis));
     if (this.isMovementSucceeded()) {
         this.setDirection(d);
@@ -353,7 +360,7 @@ Game_CharacterBase.prototype.moveStraight = function(d, dis) {
 };
 
 Game_CharacterBase.prototype.moveDiagonally = function(horz, vert, dis) {
-    dis = dis || this.defaultMoveAmount();
+    dis = dis !== undefined ? dis : this.defaultMoveAmount();
     this.setMovementSuccess(this.canPassDiagonally(this._x, this._y, horz, vert, dis));
     if (this.isMovementSucceeded()) {
         this._x = $gameMap.roundXWithDirection(this._x, horz, dis);
@@ -390,6 +397,7 @@ Game_CharacterBase.prototype.checkEventTriggerTouchFront = function(d,dis) {
 // The superclass of Game_Player, Game_Follower, GameVehicle, and Game_Event.
 // Although no edits on this class, leave this header for later use :)
 
+/*
 Game_Character.prototype.findDirectionTo = function(goalX, goalY) {
     var searchLimit = this.searchLimit();
     var mapWidth = $gameMap.width();
@@ -503,7 +511,7 @@ Game_Character.prototype.findDirectionTo = function(goalX, goalY) {
 
     return 0;
 };
-
+*/
 //-----------------------------------------------------------------------------
 // Game_Player
 //
@@ -524,7 +532,6 @@ Game_Player.prototype.moveStraight = function(d, dis) {
     if (this.canPass(this.x, this.y, d, dis)) {
         this._followers.updateMove();
         this._distanceCount++;
-        dis = Math.min(dis / 5 * this._distanceCount, dis);
     }
     Game_Character.prototype.moveStraight.call(this, d, dis);
 };
@@ -533,7 +540,6 @@ Game_Player.prototype.moveDiagonally = function(horz, vert, dis) {
     if (this.canPassDiagonally(this.x, this.y, horz, vert, dis)) {
         this._followers.updateMove();
         this._distanceCount++;
-        dis = Math.min(dis / 5 * this._distanceCount, dis);
     }
     Game_Character.prototype.moveDiagonally.call(this, horz, vert, dis);
 };
@@ -566,13 +572,23 @@ Game_Player.prototype.getInputDirection = function() {
     return Input.dir8;
 };
 
+Game_Player.prototype.distancePerMove = function() {
+    if ($gameSystem._pixelMoveEnabled) {
+        var dis = this.distancePerFrame();
+        dis = Math.min(dis / 5 * (this._distanceCount+1), dis);
+        return dis;
+    } else {
+        return 1;
+    }
+}
+
 Game_Player.prototype.executeMove = function(direction) {
     switch (direction) {
         case 2:
         case 4:
         case 6:
         case 8:
-            this.moveStraight(direction, this.distancePerFrame());
+            this.moveStraight(direction, this.distancePerMove());
             break;
         case 1:
         case 3:
@@ -580,7 +596,7 @@ Game_Player.prototype.executeMove = function(direction) {
         case 9:
             var vert = direction > 5 ? 8 : 2;
             var horz = (direction % 3  == 0 ) ? 6 : 4;
-            this.moveDiagonally(horz, vert, this.distancePerFrame());
+            this.moveDiagonally(horz, vert, this.distancePerMove());
             break;
     }
 };
