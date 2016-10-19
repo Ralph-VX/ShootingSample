@@ -49,6 +49,13 @@ patchforthisgame.stage3 = {
 }
 patchforthisgame.weaponstart = 1;
 patchforthisgame.maxweapons = 3;
+patchforthisgame.movespeed = [1];
+patchforthisgame.attackspeed = [2];
+patchforthisgame.projectilespeed = [7];
+patchforthisgame.switchspeed = [8];
+patchforthisgame.projectileamount = [9];
+patchforthisgame.projectilespread = [10];
+patchforthisgame.projectilepierce = [11];
 
 patchforthisgame.gameshootingplayerinitialize = Game_ShootingPlayer.prototype.initialize;
 Game_ShootingPlayer.prototype.initialize = function() {
@@ -65,7 +72,7 @@ Game_ShootingPlayer.prototype.update = function() {
 patchforthisgame.gameshootingplayerupdateattack = Game_ShootingPlayer.prototype.updateAttack;
 Game_ShootingPlayer.prototype.updateAttack = function() {
 	patchforthisgame.gameshootingplayerupdateattack.call(this);
-	if ($gameParty.hasItem($dataItems[1])){
+	if ($gameParty.hasItem($dataItems[patchforthisgame.attackspeed[0]])){
     	this._waitCount = Math.max(this._waitCount - 0.2, 0);
     }
 }
@@ -77,7 +84,7 @@ Game_ShootingPlayer.prototype.updateWeaponSwitch = function() {
 		AudioManager.playSe(patchforthisgame.switchse);
 		$gameParty.leader().forceChangeEquip(0, $dataWeapons[this._equiping+patchforthisgame.weaponstart]);
 		this._waitCount = 15;
-		if ($gameParty.hasItem($dataItems[7])) {
+		if ($gameParty.hasItem($dataItems[patchforthisgame.switchspeed[0]])) {
 			this._waitCount -= 3;
 		}
 	} else if (Input.isTriggered("pagedown") || TouchInput.wheelY >= threshold) {
@@ -85,7 +92,7 @@ Game_ShootingPlayer.prototype.updateWeaponSwitch = function() {
 		AudioManager.playSe(patchforthisgame.switchse);
 		$gameParty.leader().forceChangeEquip(0, $dataWeapons[this._equiping+patchforthisgame.weaponstart]);
 		this._waitCount = 15;
-		if ($gameParty.hasItem($dataItems[7])) {
+		if ($gameParty.hasItem($dataItems[patchforthisgame.switchspeed[0]])) {
 			this._waitCount -= 3;
 		}
 	}
@@ -95,22 +102,22 @@ Game_ShootingPlayer.prototype.machineGunAttackFunc = function() {
     var initFunc = function(proj) {
         this.setProjectileProperty(proj);
         var scatter = Math.PI/9;
-        if ($gameParty.hasItem($dataItems[9])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespread[0]])) {
         	scatter *= 0.95;
         }
         proj._vec.turn(Math.random()*scatter - scatter/2);
         proj._vec.setMagnitude(0.125);
-        if ($gameParty.hasItem($dataItems[6])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespeed[0]])) {
         	proj._vec.applyMagnitude(1.05);
         }
-        if ($gameParty.hasItem($dataItems[10])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilepierce[0]])) {
         	if (Math.random() <= 0.1) {
         		proj._pierce++;
         	}
         }
     }.bind(this);
     this.addProjectile("Game_ShootingProjectileStraight", initFunc);
-	if ($gameParty.hasItem($dataItems[8])) {
+	if ($gameParty.hasItem($dataItems[patchforthisgame.projectileamount[0]])) {
 		if (Math.random() <= 0.2) {
     		this.addProjectile("Game_ShootingProjectileStraight", initFunc);
 		}
@@ -123,24 +130,24 @@ Game_ShootingPlayer.prototype.shotGunAttackFunc = function() {
     var initFunc = function(proj) {
         this.setProjectileProperty(proj);
         proj._vec.setMagnitude(Math.random() * 0.1 + 0.06);
-        if ($gameParty.hasItem($dataItems[6])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespeed[0]])) {
         	proj._vec.applyMagnitude(1.05);
         }
         var scatter = Math.PI/6;
-        if ($gameParty.hasItem($dataItems[9])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespread[0]])) {
         	scatter *= 0.95;
         }
         proj._vec.turn(Math.random()*scatter - scatter/2);
         proj._projectileHue = Math.random() * 360;
         proj._damage *= 0.85;
-        if ($gameParty.hasItem($dataItems[10])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilepierce[0]])) {
         	if (Math.random() <= 0.1) {
         		proj._pierce++;
         	}
         }
     }.bind(this);
     var max = 15;
-	if ($gameParty.hasItem($dataItems[8])) {
+	if ($gameParty.hasItem($dataItems[patchforthisgame.projectileamount[0]])) {
 		max = Math.round(max * 1.2);
 	}
     for (var n = 0; n < max; n++) {
@@ -155,11 +162,11 @@ Game_ShootingPlayer.prototype.splitGunAttackFunc = function() {
         proj.childFunc = function(proj2, args) {
             this.setProjectileProperty(proj2);
             proj2.setAngle(args[0], args[1]);
-            proj._damage *= 0.25;
-	        if ($gameParty.hasItem($dataItems[6])) {
+            proj._damage *= 0.15;
+        	if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespeed[0]])) {
 	        	proj._vec.applyMagnitude(1.05);
 	        }
-	        if ($gameParty.hasItem($dataItems[10])) {
+        	if ($gameParty.hasItem($dataItems[patchforthisgame.projectilepierce[0]])) {
 	        	if (Math.random() <= 0.1) {
 	        		proj._pierce++;
 	        	}
@@ -169,11 +176,11 @@ Game_ShootingPlayer.prototype.splitGunAttackFunc = function() {
         proj._projectileName = "Shot3";
         proj._damage *= 0.4;
         proj._vec.setMagnitude(0.125);
-	    if ($gameParty.hasItem($dataItems[6])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespeed[0]])) {
 	       	proj._vec.applyMagnitude(1.05);
 	    }
         proj._acc = proj._vec.clone().applyMagnitude(-0.01);
-        if ($gameParty.hasItem($dataItems[9])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespread[0]])) {
         	proj._acc.applyMagnitude(0.95);
         }
         proj.oldUpdateMovement = proj.updateMovement;
@@ -185,7 +192,7 @@ Game_ShootingPlayer.prototype.splitGunAttackFunc = function() {
         }
         proj.onFinish = function() {
         	var dif = 20;
-			if ($gameParty.hasItem($dataItems[8])) {
+			if ($gameParty.hasItem($dataItems[patchforthisgame.projectileamount[0]])) {
 				dif /= 1.2;
 			}
             for (var n = 0; n <= 360; n += dif) {
@@ -194,7 +201,7 @@ Game_ShootingPlayer.prototype.splitGunAttackFunc = function() {
             AudioManager.playSe(patchforthisgame.splitgunsplit);
         }.bind(proj);
         proj._pierce = 2;
-        if ($gameParty.hasItem($dataItems[10])) {
+        if ($gameParty.hasItem($dataItems[patchforthisgame.projectilepierce[0]])) {
         	if (Math.random() <= 0.1) {
         		proj._pierce++;
         	}
@@ -375,7 +382,7 @@ BattleManager.setup = function(troopId, canEscape, canLose) {
             this._shootingPlayer._shootingOrigDPF = this._shootingPlayer.distancePerFrame;
 			this._shootingPlayer.distancePerFrame = function() {
 				var d = this._shootingOrigDPF();
-				if ($gameParty.hasItem($dataItems[1])){
+				if ($gameParty.hasItem($dataItems[patchforthisgame.movespeed[0]])){
 					d *= 1.05;
 				}
 				return d;
