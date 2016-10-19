@@ -164,6 +164,161 @@ if (!Rectangle.prototype.cx) {
 }
 
 //-----------------------------------------------------------------------------
+// Vector2D
+//
+// A vector object in 2d space.
+
+if (!Kien.Vector2D) {
+    Kien.Vector2D = function () {
+        this.initialize.apply(this, arguments);
+    }
+
+    Kien.Vector2D.prototype.initialize = function(x,y) {
+        this._x = x || 0;
+        this._y = y || 0;
+    }
+
+    Object.defineProperty(Kien.Vector2D.prototype, 'x', {
+        get: function() {return this._x;},
+        set: function(v) {this._x = v;},
+        configurable: true
+    });
+
+    Object.defineProperty(Kien.Vector2D.prototype, 'y', {
+        get: function() {return this._y;},
+        set: function(v) {this._y = v;},
+        configurable: true
+    });
+
+    Object.defineProperty(Kien.Vector2D.prototype, 'magnitude', {
+        get: function() {return this._magnitude()},
+        set: function(value) {this.setMagnitude(value)},
+        configurable: true
+    });
+
+    Kien.Vector2D.prototype.clone = function() {
+        var n = new Kien.Vector2D();
+        n.x = this.x;
+        n.y = this.y;
+        return n;
+    }
+
+    Kien.Vector2D.prototype._magnitude = function() {
+        return Math.sqrt(Math.pow(this.x, 2) + Math.pow(this.y, 2));
+    }
+
+    Kien.Vector2D.prototype.applyMagnitude = function(mag) {
+        this.x *= mag;
+        this.y *= mag;
+        return this;
+    }
+
+    Kien.Vector2D.prototype.dot = function(other) {
+        return this.x*other.x + this.y*other.y;
+    }
+
+    Kien.Vector2D.prototype.clockwise = function(other) {
+        return this.y*other.x > this.x*other.y ? -1 : 1;
+    }
+
+    Kien.Vector2D.prototype.crossProduct = function() {
+        var vec = this.clone();
+        vec.x = this.y;
+        vec.y = -this.x;
+        return vec;
+    }
+
+    Kien.Vector2D.prototype.angleBetween = function(other) {
+        if (this.magnitude === 0 || other.magnitude === 0) {
+            return 0;
+        }
+
+        var val = this.dot(other) / (this.magnitude * other.magnitude);
+        return Math.acos(Math.max(Math.min(1, val), -1));
+    }
+
+    Kien.Vector2D.prototype.setMagnitude = function(mag) {
+        if (this.magnitude != 0) {
+            return this.applyMagnitude(1/this.magnitude).applyMagnitude(mag);
+        } else {
+            return this;
+        }
+    }
+
+    Kien.Vector2D.prototype.unit = function() {
+        if (this.magnitude !== 0) {
+            return this.clone().applyMagnitude(1/this.magnitude);
+        } else {
+            return this.clone();
+        }
+    }
+
+    Kien.Vector2D.prototype.translatePoint = function(point) {
+        point.x += this.x;
+        point.y += this.y;
+        return point;
+    }
+
+    Kien.Vector2D.prototype.setAngle = function(angle) {
+        var mag = this.magnitude;
+        this.x = Math.cos(angle);
+        this.y = Math.sin(angle);
+        return this.setMagnitude(mag);
+    }
+
+    Kien.Vector2D.prototype.turn = function(angle, dir) {
+        var mag = this.magnitude
+        var c = Math.cos(angle);
+        var s = Math.sin(angle) * (!!dir ?  dir : 1);
+        var x = this.x;
+        var y = this.y;
+        this.x = Math.roundAt(c * x - s * y, 5);
+        this.y = Math.roundAt(s * x + c * y, 5);
+        this.setMagnitude(mag);
+        return this;
+    }
+
+    Kien.Vector2D.prototype.subtract = function(other) {
+        return new Kien.Vector2D(this.x - other.x, this.y - other.y);
+    }
+
+    Kien.Vector2D.prototype.add = function(other) {
+        return new Kien.Vector2D(this.x + other.x, this.y + other.y);
+    }
+
+    Kien.Vector2D.prototype.turnTo = function(other) {
+        var mag = this.magnitude;
+        var tu = this.unit();
+        var ou = other.unit();
+        var c = tu.dot(other);
+        var s = tu.x*ou.y - ou.x*tu.y;
+        var x = this.x;
+        var y = this.y;
+        this.x = Math.roundAt(c * x - s * y, 5);
+        this.y = Math.roundAt(s * x + c * y, 5);
+        return this;
+    }
+
+    Kien.Vector2D.getDisplacementVector = function(w,x,y,z) {
+        if (y === undefined && z === undefined) {
+            z = x.x;
+            y = x.y;
+            x = w.y;
+            w = w.x;
+        }
+        return (new Kien.Vector2D(y-w, z-x));
+    }
+    
+    Kien.Vector2D.getDirectionVector = function(w,x,y,z) {
+        return this.getDisplacementVector(w,x,y,z).unit();
+    }
+
+    Kien.Vector2D.xUnitVector = new Kien.Vector2D(1,0);
+    Kien.Vector2D.yUnitVector = new Kien.Vector2D(0,1);
+
+}
+
+//-----------------------------------------------------------------------------
 // Game_System
 //
 // The game object class for the system data.
@@ -254,10 +409,11 @@ Game_CharacterBase.prototype.defaultMoveAmount = function() {
     return $gameMap.defaultMoveAmount();
 }
 
-Game_CharacterBase.prototype.canPassDiagonally = function(x, y, horz, vert, dis) {
-    dis = dis || this.defaultMoveAmount();
-    var x2 = $gameMap.roundXWithDirection(x, horz, dis);
-    var y2 = $gameMap.roundYWithDirection(y, vert, dis);
+Game_CharacterBase.prototype.canPassDiagonally = function(x, y, horz, vert, hdis, vdis) {
+    hdis = hdis || this.defaultMoveAmount();
+    vdis = vdis || hdis;
+    var x2 = $gameMap.roundXWithDirection(x, horz, hdis);
+    var y2 = $gameMap.roundYWithDirection(y, vert, vdis);
     if (!this.isMapValid(x2, y2)) {
         return false;
     }
@@ -359,19 +515,20 @@ Game_CharacterBase.prototype.moveStraight = function(d, dis) {
     }
 };
 
-Game_CharacterBase.prototype.moveDiagonally = function(horz, vert, dis) {
-    dis = dis !== undefined ? dis : this.defaultMoveAmount();
-    this.setMovementSuccess(this.canPassDiagonally(this._x, this._y, horz, vert, dis));
+Game_CharacterBase.prototype.moveDiagonally = function(horz, vert, hdis,vdis) {
+    hdis = hdis !== undefined ? hdis : this.defaultMoveAmount();
+    vdis = vdis !== undefined ? vdis : hdis;
+    this.setMovementSuccess(this.canPassDiagonally(this._x, this._y, horz, vert, hdis, vdis));
     if (this.isMovementSucceeded()) {
-        this._x = $gameMap.roundXWithDirection(this._x, horz, dis);
-        this._y = $gameMap.roundYWithDirection(this._y, vert, dis);
-        this._realX = $gameMap.xWithDirection(this._x, this.reverseDir(horz), dis);
-        this._realY = $gameMap.yWithDirection(this._y, this.reverseDir(vert), dis);
+        this._x = $gameMap.roundXWithDirection(this._x, horz, hdis);
+        this._y = $gameMap.roundYWithDirection(this._y, vert, vdis);
+        this._realX = $gameMap.xWithDirection(this._x, this.reverseDir(horz), hdis);
+        this._realY = $gameMap.yWithDirection(this._y, this.reverseDir(vert), vdis);
         this.increaseSteps();
     } else {
-        this.moveStraight(horz, dis);
+        this.moveStraight(horz, hdis);
         if (!this.isMovementSucceeded()) {
-            this.moveStraight(vert, dis);
+            this.moveStraight(vert, vdis);
             if (this.isMovementSucceeded()){
                 return;
             }
@@ -536,12 +693,12 @@ Game_Player.prototype.moveStraight = function(d, dis) {
     Game_Character.prototype.moveStraight.call(this, d, dis);
 };
 
-Game_Player.prototype.moveDiagonally = function(horz, vert, dis) {
-    if (this.canPassDiagonally(this.x, this.y, horz, vert, dis)) {
+Game_Player.prototype.moveDiagonally = function(horz, vert, hdis, vdis) {
+    if (this.canPassDiagonally(this.x, this.y, horz, vert, hdis, vdis)) {
         this._followers.updateMove();
         this._distanceCount++;
     }
-    Game_Character.prototype.moveDiagonally.call(this, horz, vert, dis);
+    Game_Character.prototype.moveDiagonally.call(this, horz, vert, hdis, vdis);
 };
 
 Game_Player.prototype.isMapPassable = function(x, y, d, dis) {
@@ -575,7 +732,7 @@ Game_Player.prototype.getInputDirection = function() {
 Game_Player.prototype.distancePerMove = function() {
     if ($gameSystem._pixelMoveEnabled) {
         var dis = this.distancePerFrame();
-        dis = Math.min(dis / 5 * (this._distanceCount+1), dis);
+        dis = Math.min(dis * Math.pow(this._distanceCount + 1, 2) / 100, dis);
         return dis;
     } else {
         return 1;
@@ -607,9 +764,13 @@ Game_Player.prototype.moveByInput = function() {
         if (direction > 0) {
             $gameTemp.clearDestination();
         } else if ($gameTemp.isDestinationValid()){
+            var dis = this.distancePerFrame();
             var x = $gameTemp.destinationX();
             var y = $gameTemp.destinationY();
-            direction = this.findDirectionTo(x, y);
+            var vec = Kien.Vector2D.getDisplacementVector(this.x,this.y,x,y);
+            vec.setMagnitude(Math.min(vec.magnitude, dis));
+            this.moveDiagonally(vec.x > 0 ? 6 : (vec.x < 0 ? 4 : 0),vec.y > 0 ? 2 : (vec.y < 0 ? 8 : 0), Math.abs(vec.x), Math.abs(vec.y));
+            return;
         }
         if (direction > 0) {
             this.executeMove(direction);
@@ -646,6 +807,20 @@ Game_Event.prototype.checkEventTriggerTouch = function(x, y) {
 //
 // The game object class for a map. It contains scrolling and passage
 // determination functions.
+
+Game_Map.prototype.canvasToMapX = function(x) {
+    var tileWidth = this.tileWidth();
+    var originX = this._displayX * tileWidth;
+    var mapX = (originX + x) / tileWidth;
+    return mapX;
+};
+
+Game_Map.prototype.canvasToMapY = function(y) {
+    var tileHeight = this.tileHeight();
+    var originY = this._displayY * tileHeight;
+    var mapY = (originY + y) / tileHeight;
+    return mapY;
+};
 
 Game_Map.prototype.defaultMoveAmount = function() {
     return 1;

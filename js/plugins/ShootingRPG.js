@@ -54,6 +54,10 @@ Kien.ShootingRPG = {};
  * @desc show the score in battle screen.
  * @default true
  *
+ * @param Auto Fire
+ * @desc Player will automatically attack without holding button.
+ * @default true
+ *
  * @noteParam ShootingProjectileImage
  * @noteRequire 1
  * @noteDir img/system/
@@ -93,6 +97,7 @@ Kien.ShootingRPG.turnLength = parseInt(Kien.ShootingRPG.parameters["Turn Length"
 Kien.ShootingRPG.debugMode = eval(Kien.ShootingRPG.parameters["Debug Mode"]);
 Kien.ShootingRPG.limitProcess = eval(Kien.ShootingRPG.parameters["Single Frame Per Render"]);
 Kien.ShootingRPG.showScore = eval(Kien.ShootingRPG.parameters["Show Score"]);
+Kien.ShootingRPG.autoFire = eval(Kien.ShootingRPG.parameters["Auto Fire"]);
 
 
 if (Kien.ShootingRPG.battleMapId === 0) {
@@ -195,160 +200,6 @@ if (!Array.prototype.clear) {
     }
 }
 
-//-----------------------------------------------------------------------------
-// Vector2D
-//
-// A vector object in 2d space.
-
-if (!Kien.Vector2D) {
-    Kien.Vector2D = function () {
-        this.initialize.apply(this, arguments);
-    }
-
-    Kien.Vector2D.prototype.initialize = function(x,y) {
-        this._x = x || 0;
-        this._y = y || 0;
-    }
-
-    Object.defineProperty(Kien.Vector2D.prototype, 'x', {
-        get: function() {return this._x;},
-        set: function(v) {this._x = v;},
-        configurable: true
-    });
-
-    Object.defineProperty(Kien.Vector2D.prototype, 'y', {
-        get: function() {return this._y;},
-        set: function(v) {this._y = v;},
-        configurable: true
-    });
-
-    Object.defineProperty(Kien.Vector2D.prototype, 'magnitude', {
-        get: function() {return this._magnitude()},
-        set: function(value) {this.setMagnitude(value)},
-        configurable: true
-    });
-
-    Kien.Vector2D.prototype.clone = function() {
-        var n = new Kien.Vector2D();
-        n.x = this.x;
-        n.y = this.y;
-        return n;
-    }
-
-    Kien.Vector2D.prototype._magnitude = function() {
-        return Math.sqrt(Math.pow(this.x, 2) + Math.pow(this.y, 2));
-    }
-
-    Kien.Vector2D.prototype.applyMagnitude = function(mag) {
-        this.x *= mag;
-        this.y *= mag;
-        return this;
-    }
-
-    Kien.Vector2D.prototype.dot = function(other) {
-        return this.x*other.x + this.y*other.y;
-    }
-
-    Kien.Vector2D.prototype.clockwise = function(other) {
-        return this.y*other.x > this.x*other.y ? -1 : 1;
-    }
-
-    Kien.Vector2D.prototype.crossProduct = function() {
-        var vec = this.clone();
-        vec.x = this.y;
-        vec.y = -this.x;
-        return vec;
-    }
-
-    Kien.Vector2D.prototype.angleBetween = function(other) {
-        if (this.magnitude === 0 || other.magnitude === 0) {
-            return 0;
-        }
-
-        var val = this.dot(other) / (this.magnitude * other.magnitude);
-        return Math.acos(Math.max(Math.min(1, val), -1));
-    }
-
-    Kien.Vector2D.prototype.setMagnitude = function(mag) {
-        if (this.magnitude != 0) {
-            return this.applyMagnitude(1/this.magnitude).applyMagnitude(mag);
-        } else {
-            return this;
-        }
-    }
-
-    Kien.Vector2D.prototype.unit = function() {
-        if (this.magnitude !== 0) {
-            return this.clone().applyMagnitude(1/this.magnitude);
-        } else {
-            return this.clone();
-        }
-    }
-
-    Kien.Vector2D.prototype.translatePoint = function(point) {
-        point.x += this.x;
-        point.y += this.y;
-        return point;
-    }
-
-    Kien.Vector2D.prototype.setAngle = function(angle) {
-        var mag = this.magnitude;
-        this.x = Math.cos(angle);
-        this.y = Math.sin(angle);
-        return this.setMagnitude(mag);
-    }
-
-    Kien.Vector2D.prototype.turn = function(angle, dir) {
-        var mag = this.magnitude
-        var c = Math.cos(angle);
-        var s = Math.sin(angle) * (!!dir ?  dir : 1);
-        var x = this.x;
-        var y = this.y;
-        this.x = Math.roundAt(c * x - s * y, 5);
-        this.y = Math.roundAt(s * x + c * y, 5);
-        this.setMagnitude(mag);
-        return this;
-    }
-
-    Kien.Vector2D.prototype.subtract = function(other) {
-        return new Kien.Vector2D(this.x - other.x, this.y - other.y);
-    }
-
-    Kien.Vector2D.prototype.add = function(other) {
-        return new Kien.Vector2D(this.x + other.x, this.y + other.y);
-    }
-
-    Kien.Vector2D.prototype.turnTo = function(other) {
-        var mag = this.magnitude;
-        var tu = this.unit();
-        var ou = other.unit();
-        var c = tu.dot(other);
-        var s = tu.x*ou.y - ou.x*tu.y;
-        var x = this.x;
-        var y = this.y;
-        this.x = Math.roundAt(c * x - s * y, 5);
-        this.y = Math.roundAt(s * x + c * y, 5);
-        return this;
-    }
-
-    Kien.Vector2D.getDisplacementVector = function(w,x,y,z) {
-        if (y === undefined && z === undefined) {
-            z = x.x;
-            y = x.y;
-            x = w.y;
-            w = w.x;
-        }
-        return (new Kien.Vector2D(y-w, z-x));
-    }
-    
-Kien.Vector2D.getDirectionVector = function(w,x,y,z) {
-    return this.getDisplacementVector(w,x,y,z).unit();
-}
-
-    Kien.Vector2D.xUnitVector = new Kien.Vector2D(1,0);
-    Kien.Vector2D.yUnitVector = new Kien.Vector2D(0,1);
-
-}
 
 if (!Math.deg2Rad) {
     Math.deg2Rad = function(degree) {
@@ -674,6 +525,7 @@ Game_System.prototype.initialize = function() {
     this._shootingRPGShowScore = Kien.ShootingRPG.showScore;
     this._shootingRPGBattleEndSwitchId = Kien.ShootingRPG.battleEndSwitchId;
     this._shootingRPGBattleResultVariableId = Kien.ShootingRPG.battleResultVariableId;
+    this._shootingRPGAutoFire = Kien.ShootingRPG.autoFire;
     this._shootingRPGNearmiss = false;
     this._shootingRPGScore = 0;
 }
@@ -825,7 +677,7 @@ Game_ShootingPlayer.prototype.updateMovement = function() {
 }
 
 Game_ShootingPlayer.prototype.updateAttack = function() {
-    if (Input.isPressed('ok') && this._waitCount == 0) {
+    if ((Input.isPressed('ok') != $gameSystem._shootingRPGAutoFire) && this._waitCount == 0) {
         this.callAttackFunction();
     }
     this._waitCount = Math.max(this._waitCount - 1, 0);
@@ -1745,7 +1597,7 @@ Sprite_ShootingPlayer.prototype.updateProjectile = function() {
 }
 
 Sprite_ShootingPlayer.prototype.updateDebug = function() {
-    if (Kien.ShootingRPG.debugMode) {
+    //if (Kien.ShootingRPG.debugMode) {
         var rect = this._battler.positionRect();
         var tw = $gameMap.tileWidth();
         var th = $gameMap.tileHeight();
@@ -1756,19 +1608,19 @@ Sprite_ShootingPlayer.prototype.updateDebug = function() {
         if (!!!this._debugSprite) {
             this._debugSprite = new Sprite();
             this._debugSprite.bitmap = new Bitmap(rect.width, rect.height);
-            this._debugSprite.bitmap.fillRect(0,0,rect.width,rect.height,"rgba(255,255,255,0.5)");
+            this._debugSprite.bitmap.fillRect(0,0,rect.width,rect.height,"rgba(255,0,0,1)");
             this._debugSprite.x = rect.x;
             this._debugSprite.y = rect.y;
             this.parent.addChild(this._debugSprite);
         } else {
             if (this._debugSprite.bitmap.width != rect.width || this._debugSprite.bitmap.height != rect.height) {
                 this._debugSprite.bitmap = new Bitmap(rect.width, rect.height);
-                this._debugSprite.bitmap.fillRect(0,0,rect.width,rect.height,"rgba(255,255,255,0.5)");
+                this._debugSprite.bitmap.fillRect(0,0,rect.width,rect.height,"rgba(255,0,0,1)");
             }
             this._debugSprite.x = rect.x;
             this._debugSprite.y = rect.y;
         }
-    }
+    //}
 }
 
 Sprite_ShootingPlayer.prototype.onRemoved = function() {
@@ -2274,6 +2126,7 @@ Scene_BattleShooting.prototype.constructor = Scene_BattleShooting;
 Scene_BattleShooting.prototype.initialize = function() {
     Scene_Base.prototype.initialize.call(this);
     this._pause = false;
+    this._touchCount = 0;
 };
 
 Scene_BattleShooting.prototype.isReady = function() {
@@ -2305,6 +2158,7 @@ Scene_BattleShooting.prototype.update = function() {
         return;
     }
     var active = this.isActive();
+    this.updateMapTouch();
     BattleManager.update();
     $gameMap.update(active);
     $gamePlayer.update(active);
@@ -2313,8 +2167,23 @@ Scene_BattleShooting.prototype.update = function() {
     Scene_Base.prototype.update.call(this);
 };
 
+Scene_BattleShooting.prototype.updateMapTouch = function() {
+    if (TouchInput.isTriggered() || this._touchCount > 0) {
+        if (TouchInput.isPressed()) {
+            if (this._touchCount === 0 || this._touchCount >= 3) {
+                var x = $gameMap.canvasToMapX(TouchInput.x);
+                var y = $gameMap.canvasToMapY(TouchInput.y);
+                $gameTemp.setDestination(x, y);
+            }
+            this._touchCount++;
+        } else {
+            this._touchCount = 0;
+        }
+    }
+};
+
 Scene_BattleShooting.prototype.updatePause = function() {
-    if (Input.isTriggered("cancel")) {
+    if (Input.isTriggered("cancel") || TouchInput.isCancelled()) {
         this._pause = !this._pause;
         SoundManager.playCancel();
     }

@@ -71,7 +71,8 @@ Game_ShootingPlayer.prototype.updateAttack = function() {
 }
 
 Game_ShootingPlayer.prototype.updateWeaponSwitch = function() {
-	if (Input.isTriggered('pageup')) {
+	var threshold = 20;
+	if (Input.isTriggered('pageup') || TouchInput.wheelY <= -threshold) {
 		this._equiping = ((this._equiping - 1) + patchforthisgame.maxweapons) % patchforthisgame.maxweapons;
 		AudioManager.playSe(patchforthisgame.switchse);
 		$gameParty.leader().forceChangeEquip(0, $dataWeapons[this._equiping+patchforthisgame.weaponstart]);
@@ -79,7 +80,7 @@ Game_ShootingPlayer.prototype.updateWeaponSwitch = function() {
 		if ($gameParty.hasItem($dataItems[7])) {
 			this._waitCount -= 3;
 		}
-	} else if (Input.isTriggered("pagedown")) {
+	} else if (Input.isTriggered("pagedown") || TouchInput.wheelY >= threshold) {
 		this._equiping = ((this._equiping + 1) + patchforthisgame.maxweapons) % patchforthisgame.maxweapons;
 		AudioManager.playSe(patchforthisgame.switchse);
 		$gameParty.leader().forceChangeEquip(0, $dataWeapons[this._equiping+patchforthisgame.weaponstart]);
@@ -219,7 +220,6 @@ Game_ShootingEnemy.prototype.stage1Enemy = function() {
 			proj._damage *= 0.5;
 			proj.setAngle(Math.deg2Rad(args[0]), 0.025);
 		}
-		console.log(this._playerTarget);
 		if (this._playerTarget == 0) {
 			this.addProjectile("Game_ShootingProjectileStraight", initFunc1);
 			AudioManager.playSe(patchforthisgame.stage1);
@@ -241,6 +241,7 @@ Game_ShootingEnemy.prototype.stage1Enemy = function() {
 Game_ShootingEnemy.prototype.stage2Enemy = function() {
     this._waitCount = this._waitCount || 0;
     this._angle = this._angle || 0;
+    this._shootCount = this._shootCount || 0;
     if (this._waitCount == 0) {
 		var initFunc2 = function(proj, args) {
 			this.setProjectileProperty(proj);
@@ -252,6 +253,11 @@ Game_ShootingEnemy.prototype.stage2Enemy = function() {
 		this.addProjectile("Game_ShootingProjectileFollow", initFunc2, (this._angle+180) % 360);
 		this._angle = (this._angle + 11) % 360;
 		this._waitCount = 5;
+		this._shootCount++;
+		if (this._shootCount == 20) {
+			this._waitCount = 60;
+			this._shootCount = 0;
+		}
     } else {
     	this._waitCount--;
     }
