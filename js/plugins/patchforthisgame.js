@@ -307,9 +307,9 @@ Game_ShootingEnemy.prototype.stage4Enemy = function() {
    				AudioManager.playSe(patchforthisgame.stage3);
    				this._played = true;
    			}
-   			this._waitCount = 3;
+   			this._waitCount = 6;
     		this._shotCount++;
-    		if (this._shotCount >= 60) {
+    		if (this._shotCount >= 40) {
     			this._phase = 1;
     			this._shotCount = 0;
    				this._waitCount = 120;
@@ -325,7 +325,7 @@ Game_ShootingEnemy.prototype.stage4Enemy = function() {
    			for (var ang = -45; ang <= 45; ang += 15) {
    				this.addProjectile("Game_ShootingProjectileStraight", func, Math.deg2Rad(ang));
    			}
-   			this._waitCount = 15;
+   			this._waitCount = 25;
    			this._shotCount++;
    			if (!this._played) {
    				AudioManager.playSe(patchforthisgame.stage3);
@@ -348,14 +348,14 @@ Game_ShootingEnemy.prototype.stage4Enemy = function() {
    				proj._damage *= 0.8;
    			}
    			this.addProjectile("Game_ShootingProjectileStraight",func, Math.deg2Rad(((this._angle > 90 ? 180 - this._angle : this._angle) - 45)));
-   			this._waitCount = 3;
+   			this._waitCount = 6;
    			this._angle = (this._angle + 6) % 180;
    			this._shotCount++;
    			if (!this._played) {
    				AudioManager.playSe(patchforthisgame.stage3);
    				this._played = true;
    			}
-    		if (this._shotCount >= 60) {
+    		if (this._shotCount >= 40) {
     			this._phase = 0;
     			this._shotCount = 0;
    				this._waitCount = 180;
