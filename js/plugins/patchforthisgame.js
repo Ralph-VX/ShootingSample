@@ -399,3 +399,57 @@ BattleManager.setup = function(troopId, canEscape, canLose) {
         $dataMap = DataManager._reservedMap;
 	}
 };
+
+//-----------------------------------------------------------------------------
+// Sprite_ShootingWeaponName
+//
+// The sprite for displaying score.
+
+function Sprite_ShootingWeaponName() {
+    this.initialize.apply(this, arguments);
+}
+
+Sprite_ShootingWeaponName.prototype = Object.create(Sprite_Base.prototype);
+Sprite_ShootingWeaponName.prototype.constructor = Sprite_ShootingWeaponName;
+
+Sprite_ShootingWeaponName.prototype.initialize = function() {
+    Sprite_Base.prototype.initialize.call(this);
+    this._currentItem = null;
+    this.createBitmap();
+}
+
+Sprite_ShootingWeaponName.prototype.createBitmap = function() {
+	this.bitmap = new Bitmap(144, 36);
+}
+
+Sprite_ShootingWeaponName.prototype.update = function() {
+	Sprite_Base.prototype.update.call(this);
+	this.updateWeaponName();
+}
+
+Sprite_ShootingWeaponName.prototype.updateWeaponName = function() {
+	if ($gameParty.leader().weapons()[0] != this._currentItem) {
+		this._currentItem = $gameParty.leader().weapons()[0];
+		this.bitmap.clear();
+		var iconIndex = this._currentItem.iconIndex;
+	    var bitmap = ImageManager.loadSystem('IconSet');
+	    var pw = Window_Base._iconWidth;
+	    var ph = Window_Base._iconHeight;
+	    var sx = iconIndex % 16 * pw;
+	    var sy = Math.floor(iconIndex / 16) * ph;
+	    this.bitmap.blt(bitmap, sx, sy, pw, ph, 0, 0);
+		this.bitmap.drawText(this._currentItem.name, pw + 4, 0, 144 - pw - 4, 36);
+	}
+}
+
+patchforthisgame.spritesetshootingcreateupperlayer = Spriteset_Shooting.prototype.createUpperLayer;
+Spriteset_Shooting.prototype.createUpperLayer = function() {
+	patchforthisgame.spritesetshootingcreateupperlayer.call(this);
+	this.createWeaponNameSprite();
+};
+
+Spriteset_Shooting.prototype.createWeaponNameSprite = function() {
+	this._weaponNameSprite = new Sprite_ShootingWeaponName();
+	this._weaponNameSprite.y = Graphics._height - this._weaponNameSprite.height;
+	this.addChild(this._weaponNameSprite);
+}
