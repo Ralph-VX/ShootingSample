@@ -948,7 +948,9 @@ Game_Interpreter.prototype.commonstage4attack = function() {
 			proj._damage = 80;
 			proj._opposite = listFunc;
 			proj._projectileName = "Shot2";
-			proj.modifyDamage = function(target) {return !!target.battler && target.battler().isActor() ?  this._damage : this._damage*0.2;}.bind(proj);
+			proj.modifyDamage = function(battler) {
+				return !!battler.battler && battler.battler().isActor() ?  this._damage : this._damage*0.2;
+			}.bind(proj);
 		}
 		for (var ang = 0; ang < 360; ang += 20) {
 			BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initFunc, Math.deg2Rad(ang));
