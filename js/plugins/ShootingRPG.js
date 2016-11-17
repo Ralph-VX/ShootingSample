@@ -82,6 +82,7 @@ Kien.ShootingRPG = {};
  * @help
  * <ShootingProjectileImage:filename>: set the default filename of the shot. Can set on Enemy, Actor and Weapon.
  * <ShootingAi:funcName>: set the ai function to funcName, or it will be "aiFunc" + enemyId;
+ * <ShootingAiInit:funcName>: set the ai initialization function to funcName, or it will not be initialized (do it inside your function).
  * <AttackFunc:funcName>: set the attack function of player/weapon.
  * 
 */
@@ -289,6 +290,8 @@ BattleManager.setup = function(troopId, canEscape, canLose) {
             this._shootingMap = new Game_Map();
         }
         this._shootingPlayer.refresh();
+        this._lastPixelMoveEnable = $gameSystem._pixelMoveEnabled;
+        $gameSystem._pixelMoveEnabled = true;
         DataManager._reservedGameMap = $gameMap;
         DataManager._reservedGamePlayer = $gamePlayer;
         DataManager._reservedMap = $dataMap;
@@ -327,10 +330,11 @@ BattleManager.createBattlers = function() {
 }
 
 BattleManager.revertGameObject = function() {
-        DataManager._reservedMap = null;
-        $gameMap._interpreter.clear();
-        $gameMap = DataManager._reservedGameMap;
-        $gamePlayer = DataManager._reservedGamePlayer;
+    DataManager._reservedMap = null;
+    $gameMap._interpreter.clear();
+    $gameMap = DataManager._reservedGameMap;
+    $gamePlayer = DataManager._reservedGamePlayer;
+    $gameSystem._pixelMoveEnabled = this._lastPixelMoveEnable;
 }
 
 Kien.ShootingRPG.BattleManager_isBusy = BattleManager.isBusy;
@@ -377,9 +381,15 @@ BattleManager.updateBattler = function() {
     this.enemies.forEach(function(b){
         b.update();
     });
+    this.subEnemies.forEach(function(b){
+        b.update();
+    });
     this.extra.update();
     this.player.checkCollision();
     this.enemies.forEach(function(b){
+        b.checkCollision();
+    });
+    this.subEnemies.forEach(function(b){
         b.checkCollision();
     });
     this.extra.checkCollision();
@@ -388,14 +398,34 @@ BattleManager.updateBattler = function() {
 
 BattleManager.reportProjectiles = function() {
     if (Kien.ShootingRPG.debugMode) {
-        var sum = 0;
-        sum += this.player._projectiles.length;
-        for (var n = 0; n <this.enemies.length; n++) {
-            sum += this.enemies[n]._projectiles.length;
-        }
-        sum += this.extra._projectiles.length;
+        var sum = this.playerProjectiles();
+        sum += this.enemyProjectiles();
+        sum += this.extraProjectiles();
         console.log(sum, Math.round(Graphics._fpsMeter.fps));
     }
+}
+
+BattleManager.playerProjectiles = function() {
+    var sum = 0;
+    sum += this.player._projectiles.length;
+    return sum;
+}
+
+BattleManager.enemyProjectiles = function() {
+    var sum = 0;
+    for (var n = 0; n <this.enemies.length; n++) {
+        sum += this.enemies[n]._projectiles.length;
+    }
+    for (var n = 0; n <this.subEnemies.length; n++) {
+        sum += this.subEnemies[n]._projectiles.length;
+    }
+    return sum;
+}
+
+BattleManager.extraProjectiles = function() {
+    var sum = 0;
+    sum += this.extra._projectiles.length;
+    return sum;
 }
 
 Kien.ShootingRPG.BattleManager_endTurn = BattleManager.endTurn;
@@ -444,17 +474,26 @@ BattleManager.getBattlerFromEvent = function(e) {
         if (!!e2) {
             return e2;
         } else {
-            return this.extra;
         }
     }
 }
 
+BattleManager.getSubenemyFromEvent = function(e) {
+    var e2 = this.subEnemies.find(function(be){
+        return be._src == e;
+    });
+    if (!!e2) {
+        return e2;
+    } else {
+        return null;
+    }
+}
 BattleManager.playerMember = function() {
-    return [this.player];
+    return [this.player].concat(this.subEnemies.filter(function(se){return se._isActor}));
 }
 
 BattleManager.enemyMember = function() {
-    return this.enemies.concat(this.subEnemies);
+    return this.enemies.concat(this.subEnemies.filter(function(se){return !se._isActor}));
 }
 
 BattleManager.playerHp = function() {
@@ -470,10 +509,7 @@ BattleManager.enemyHp = function() {
 }
 
 BattleManager.addSubEnemy = function(obj) {
-    var i = this.subEnemies.findIndex(function(o) {return o._src == obj.src});
-    if (i >= 0) {
-        this.subEnemies.splice(i,1);
-    }
+    this.removeSubEnemy(obj);
     this.subEnemies.push(new Game_ShootingSubEnemy(obj));
 }
 
@@ -482,10 +518,23 @@ BattleManager.removeSubEnemy = function(obj) {
         obj = obj.src;
     }
     var i = this.subEnemies.findIndex(function(o) {return o._src == obj});
+    console.log(this.subEnemies, i);
     if (i >= 0) {
         this.subEnemies.splice(i,1);
     }
 }
+
+BattleManager.processVictory = function() {
+    $gameParty.removeBattleStates();
+    $gameParty.performVictory();
+    //this.playVictoryMe();
+    this.replayBgmAndBgs();
+    this.makeRewards();
+    this.displayVictoryMessage();
+    this.displayRewards();
+    this.gainRewards();
+    this.endBattle(0);
+};
 
 BattleManager.displayVictoryMessage = function() {
     //$gameMessage.add(TextManager.victory.format($gameParty.name()));
@@ -799,8 +848,8 @@ Game_ShootingEnemy.prototype.updateMovement = function() {
     var lx = this.x;
     var ly = this.y;
     this._lastBoundbox = this._boundbox.clone();
-    this._boundbox.x = this._character.x - (this._enemyWidth/2) * this._size;
-    this._boundbox.y = this._character.y - (this._enemyHeight) * this._size;
+    this._boundbox.x = this._character._realX - (this._enemyWidth/2) * this._size;
+    this._boundbox.y = this._character._realY - (this._enemyHeight) * this._size;
     this._boundbox.width = this._enemyWidth * this._size;
     this._boundbox.height = this._enemyHeight * this._size;
     if (this._noteBound) {
@@ -837,6 +886,9 @@ Game_ShootingEnemy.prototype.setupEnemyInfo = function() {
             this._enemyHeight = bitmap.height / $gameMap.tileHeight();
         }.bind(this));
         this._aiFuncName = this._enemy.enemy().meta["ShootingAi"];
+        if (this._enemy.enemy().meta["ShootingAiInit"] && this[this._enemy.enemy().meta["ShootingAiInit"]]) {
+            this[this._enemy.enemy().meta["ShootingAiInit"]].call(this);
+        }
         if (this._enemy.enemy().meta["ShootingBoundbox"]) {
             this._noteBound = Rectangle.fromString(this._enemy.enemy().meta["ShootingBoundbox"]);
             this._noteBound.x = this._noteBound.x / $gameMap.tileWidth();
@@ -1036,6 +1088,7 @@ Game_ShootingSubEnemy.prototype.initialize = function(obj) {
     this._src = obj.src;
     this._hp = obj.hp;
     this._def = obj.def;
+    this._isActor = obj.isactor;
 }
 
 Game_ShootingSubEnemy.prototype.difVec = function() {
@@ -1050,8 +1103,8 @@ Game_ShootingSubEnemy.prototype.update = function() {
 Game_ShootingSubEnemy.prototype.updatePosition = function() {
     var lx = this.x;
     var ly = this.y;
-    this._boundbox.x = this._src.x - this._boundbox.width/2;
-    this._boundbox.y = this._src.y - this._boundbox.height;
+    this._boundbox.x = this._src._realX - this._boundbox.width/2;
+    this._boundbox.y = this._src._realY - this._boundbox.height;
     this._difVec.x = this.x - lx;
     this._difVec.y = this.y - ly;
 }
@@ -1083,6 +1136,7 @@ Object.defineProperty(Game_ShootingProjectileBase.prototype, 'x', {
     get: function() {return this.realX()},
     configurable: true
 })
+
 
 Object.defineProperty(Game_ShootingProjectileBase.prototype, 'y', {
     get: function() {return this.realY()},
@@ -1231,6 +1285,10 @@ Game_ShootingProjectileBase.prototype.positionRect = function() {
     return this._boundbox.clone();
 }
 
+Game_ShootingProjectileBase.prototype.position = function() {
+    return new Kien.Vector2D(this._boundbox.cx, this._boundbox.cy);
+}
+
 Game_ShootingProjectileBase.prototype.opposites = function() {
     return this._opposite.call();
 }
@@ -1279,14 +1337,13 @@ Game_ShootingProjectileBase.prototype.realY = function() {
 }
 
 Game_ShootingProjectileBase.prototype.onCollide = function(target) {
-    var battler = target.battler();
-    if (!this._hit[battler] && !battler.isDead()){
-        var damage = this.modifyDamage(battler);
+    if (!this._hit[target] && target.exists()){
+        var damage = this.modifyDamage(target);
         target.applyDamage(damage);
         this._pierce--;
         if (this._pierce > 0) {
-            this._hit[battler] = {x : this.realX(), y : this.realY(), dur: 10};
-            this._hitIndex.push(battler);
+            this._hit[target] = {x : this.realX(), y : this.realY(), dur: 10};
+            this._hitIndex.push(target);
         } else {
             this._finish = true;
             this.onFinish();
@@ -1468,9 +1525,21 @@ Game_Event.prototype.createSubEnemy = function(boxwidth, boxheight, isActor, thp
         boundbox: new Rectangle(this.x-boxwidth/2, this.y-boxheight, boxwidth, boxheight),
         hp: thp,
         def: tdef,
-        ondead: tonDead || function() {$gameSelfSwitches.setValue([this._mapId, this._eventId, "A"], true); BattleManager.removeSubEnemy(this)}.bind(this),
-        ondamage: tonDamage || function() {isActor ? SoundManager.playActorDamage() : SoundManager.playEnemyDamage();},
+        ondead: tonDead || function() {this.defaultSubEnemyOnDead()}.bind(this),
+        ondamage: tonDamage || function() {this.defaultSubEnemyOnDamage(isActor)}.bind(this),
         isactor: isActor
+    }
+}
+
+Game_Event.prototype.defaultSubEnemyOnDead = function() {
+    $gameSelfSwitches.setValue([this._mapId, this._eventId, "A"], true);
+    BattleManager.removeSubEnemy(this)
+}
+
+Game_Event.prototype.defaultSubEnemyOnDamage = function(isActor) {
+    isActor ? SoundManager.playActorDamage() : SoundManager.playEnemyDamage();
+    if (Imported.Kien_CharacterShake) {
+        this.kienStartShake(2,5,10,false);
     }
 }
 
@@ -1546,6 +1615,58 @@ Game_Interpreter.prototype.character = function(param) {
         return null;
     }
 };
+
+//-----------------------------------------------------------------------------
+// Sprite_Character
+//
+// The sprite for displaying a character.
+
+Kien.ShootingRPG.Sprite_Character_update = Sprite_Character.prototype.update;
+Sprite_Character.prototype.update = function() {
+    Kien.ShootingRPG.Sprite_Character_update.call(this);
+    this.updateDebug();
+};
+
+Sprite_Character.prototype.updateDebug = function() {
+    if (Kien.ShootingRPG.debugMode && $gameParty.inBattle()) {
+        var battler = BattleManager.getSubenemyFromEvent(this._character);
+        if (battler) {
+            var rect = battler.positionRect();
+            var tw = $gameMap.tileWidth();
+            var th = $gameMap.tileHeight();
+            rect.x = $gameMap.adjustX(rect.x) * tw;
+            rect.y = $gameMap.adjustY(rect.y) * th;
+            rect.width = rect.width * tw;
+            rect.height = rect.height * th;
+            if (!!!this._debugSprite) {
+                this._debugSprite = new Sprite();
+                this._debugSprite.bitmap = new Bitmap(rect.width, rect.height);
+                this._debugSprite.bitmap.fillRect(0,0,rect.width,rect.height,"rgba(255,255,255,0.5)");
+                this._debugSprite.x = rect.x;
+                this._debugSprite.y = rect.y;
+                this.parent.addChild(this._debugSprite);
+            } else {
+                if (this._debugSprite.bitmap.width != rect.width || this._debugSprite.bitmap.height != rect.height) {
+                    this._debugSprite.bitmap = new Bitmap(rect.width, rect.height);
+                    this._debugSprite.bitmap.fillRect(0,0,rect.width,rect.height,"rgba(255,255,255,0.5)");
+                }
+                this._debugSprite.x = rect.x;
+                this._debugSprite.y = rect.y;
+            }
+        } else {
+            if (!!this._debugSprite) {
+                this.onRemoved();
+                this._debugSprite = null;
+            }
+        }
+    }
+}
+
+Sprite_Character.prototype.onRemoved = function() {
+    if (!!this._debugSprite) {
+        this._debugSprite.parent.removeChild(this._debugSprite);
+    }
+}
 
 //-----------------------------------------------------------------------------
 // Sprite_ShootingPlayer

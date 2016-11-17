@@ -499,6 +499,14 @@ Game_CharacterBase.prototype.setPosition = function(x, y) {
     this._realY = this._y;
 };
 
+Game_CharacterBase.prototype.xCoordToPosition = function(x) {
+    return Math.round(x) + 0.5;
+}
+
+Game_CharacterBase.prototype.yCoordToPosition = function(y) {
+    return Math.round(y) + this._pixelMoveData._rect.height;
+}
+
 Game_CharacterBase.prototype.moveStraight = function(d, dis) {
     dis = dis !== undefined ? dis : this.defaultMoveAmount();
     this.setMovementSuccess(this.canPass(this._x, this._y, d, dis));
@@ -726,7 +734,7 @@ Game_Player.prototype.startMapEvent = function(x, y, triggers, normal) {
 };
 
 Game_Player.prototype.getInputDirection = function() {
-    return Input.dir8;
+    return $gameSystem._pixelMoveEnabled ? Input.dir8 : Input.dir4; 
 };
 
 Game_Player.prototype.distancePerMove = function() {
@@ -767,10 +775,14 @@ Game_Player.prototype.moveByInput = function() {
             var dis = this.distancePerFrame();
             var x = $gameTemp.destinationX();
             var y = $gameTemp.destinationY();
-            var vec = Kien.Vector2D.getDisplacementVector(this.x,this.y,x,y);
-            vec.setMagnitude(Math.min(vec.magnitude, dis));
-            this.moveDiagonally(vec.x > 0 ? 6 : (vec.x < 0 ? 4 : 0),vec.y > 0 ? 2 : (vec.y < 0 ? 8 : 0), Math.abs(vec.x), Math.abs(vec.y));
-            return;
+            if ($gameSystem._pixelMoveEnabled) {
+                var vec = Kien.Vector2D.getDisplacementVector(this.x,this.y,x,y);
+                vec.setMagnitude(Math.min(vec.magnitude, dis));
+                this.moveDiagonally(vec.x > 0 ? 6 : (vec.x < 0 ? 4 : 0),vec.y > 0 ? 2 : (vec.y < 0 ? 8 : 0), Math.abs(vec.x), Math.abs(vec.y));
+                return;
+            } else {
+                direction = this.findDirectionTo(x, y);
+            }
         }
         if (direction > 0) {
             this.executeMove(direction);
@@ -788,6 +800,22 @@ Game_Player.prototype.updateStop = function() {
 //
 // The game object class for an event. It contains functionality for event page
 // switching and running parallel process events.
+
+Game_Event.prototype.initialize = function(mapId, eventId) {
+    Game_Character.prototype.initialize.call(this);
+    this._mapId = mapId;
+    this._eventId = eventId;
+    var offset = this.event().meta["offset"];
+    var offx = 0;
+    var offy = 0;
+    if (offset) {
+        offset = offset.split(",");
+        offx = parseFloat(offset[0]);
+        offy = parseFloat(offset[1]);
+    }
+    this.locate(this.event().x+offx, this.event().y+offy);
+    this.refresh();
+};
 
 Game_Event.prototype.checkEventTriggerTouch = function(x, y) {
     if (!$gameMap.isEventRunning()) {

@@ -162,13 +162,16 @@ Game_ShootingPlayer.prototype.splitGunAttackFunc = function() {
         proj.childFunc = function(proj2, args) {
             this.setProjectileProperty(proj2);
             proj2.setAngle(args[0], args[1]);
-            proj._damage *= 0.15;
+            proj2._damage *= 0.15;
         	if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespeed[0]])) {
-	        	proj._vec.applyMagnitude(1.05);
+	        	proj2._vec.applyMagnitude(1.05);
 	        }
+	        proj2.isValid = function() {
+        		return Math.sqrt((Math.pow(this.realX(), 2) + Math.pow(this.realY(), 2))) < 100;
+        	}.bind(proj2);
         	if ($gameParty.hasItem($dataItems[patchforthisgame.projectilepierce[0]])) {
 	        	if (Math.random() <= 0.1) {
-	        		proj._pierce++;
+	        		proj2._pierce++;
 	        	}
 	        }
         };
@@ -183,14 +186,21 @@ Game_ShootingPlayer.prototype.splitGunAttackFunc = function() {
         if ($gameParty.hasItem($dataItems[patchforthisgame.projectilespread[0]])) {
         	proj._acc.applyMagnitude(0.95);
         }
+        proj.isValid = function() {
+        	return Math.sqrt((Math.pow(this.realX(), 2) + Math.pow(this.realY(), 2))) < 100;
+        }.bind(proj);
         proj.oldUpdateMovement = proj.updateMovement;
         proj.updateMovement = function() {
         	proj.oldUpdateMovement();
+        	console.log(this.isValid());
         	if (this._vec.magnitude <= 0.001) {
         		this._vec.setMagnitude(0);
         	}
         }
         proj.onFinish = function() {
+        	if (this._pierce == 0) {
+        		return;
+        	}
         	var dif = 20;
 			if ($gameParty.hasItem($dataItems[patchforthisgame.projectileamount[0]])) {
 				dif /= 1.2;
@@ -369,6 +379,305 @@ Game_ShootingEnemy.prototype.stage4Enemy = function() {
 
 }
 
+Game_ShootingEnemy.prototype.stage6Enemy = function() {
+    this._waitCount = this._waitCount || 0;
+    if (this._waitCount == 0) {
+		var initFunc = function(proj, args) {
+			this.setProjectileProperty(proj);
+			proj._vec.x = 0;
+			proj._vec.y = 1;
+			proj._vec.setMagnitude(0.02);
+			proj.setPosition(proj.x + args[0], proj.y);
+			proj._damage *= 0.5;
+		}
+		var dif = 0.35;
+		dif -= (0.35 - 0.2) * (1 - this._enemy.hpRate());
+		for (var dx = -2; dx <= 2; dx += dif) {
+			this.addProjectile("Game_ShootingProjectileStraight", initFunc, dx);
+		}
+		this._waitCount = 25;
+    } else {
+    	this._waitCount--;
+    }
+}
+
+Game_ShootingEnemy.prototype.stage7Init = function() {
+	this._waitCount = 60 * this._enemy.index();
+	this._shotCount = 0;
+}
+
+Game_ShootingEnemy.prototype.stage7Enemy = function() {
+    if (this._waitCount == 0) {
+		var initFunc = function(proj, args) {
+			this.setProjectileProperty(proj);
+			proj._vec.x = 0;
+			proj._projectileHue = 130;
+			proj._vec.y = Math.random(2);
+			proj._vec.setMagnitude(0.05);
+			proj._vec.turn(Math.deg2Rad())
+			proj._damage *= 0.5;
+			proj._origMovement = proj.updateMovement;
+			proj._origPos = proj.position();
+			proj._targetDistance = 2 + Math.random() * 2;
+			proj._phase = 0;
+			proj.updateMovement = function() {
+				if (this._phase == 0) {
+					if (Kien.Vector2D.getDisplacementVector(this._boundbox.cx, this._boundbox.cy, this._origPos.x, this._origPos.y).magnitude <= 0.01) {
+						this._phase = 1;
+					}
+				} else if (this._phase == 1) {
+					var vec = Kien.Vector2D.getDisplacementVector(this.x, this.y, BattleManager.player.x, BattleManager.player.y);
+			        var ang = this._vec.angleBetween(vec);
+			        if (Math.rad2Deg(ang) < = 0.5) {
+			        	this._phase = 2;
+			        } else {
+				        var dif = Math.deg2Rad(2);
+				        ang = ang.clamp(-dif, dif);
+				        this._vec.turn(ang, this._vec.clockwise(vec));
+			        }
+				}
+				this._origMovement.call(this);
+			}.bind(proj);
+		}
+		var dif = 0.35;
+		dif -= (0.35 - 0.2) * (1 - this._enemy.hpRate());
+		for (var dx = -2; dx <= 2; dx += dif) {
+			this.addProjectile("Game_ShootingProjectileStraight", initFunc, dx);
+		}
+		this._waitCount = 25;
+    } else {
+    	this._waitCount--;
+    }
+}
+
+
+Game_Interpreter.prototype.commonstage5crystalmovement = function() {
+	if (!this.event().isMoving()) {
+		switch(this.event()._bdirection) {
+			case 2:
+				this.event()._x = this.event().xCoordToPosition(16);
+				this.event()._bdirection = 6;
+				break;
+			case 4:
+				this.event()._y = this.event().yCoordToPosition(12);
+				this.event()._bdirection = 2;
+				break;
+			case 6:
+				this.event()._y = this.event().yCoordToPosition(0);
+				this.event()._bdirection = 8;
+				break;
+			case 8:
+				this.event()._x = this.event().xCoordToPosition(0);
+				this.event()._bdirection = 4;
+				break;
+		}
+	}
+}
+
+Game_Interpreter.prototype.commonstage5crystalattack1 = function() {
+	if (this.event()._skillWaitCount === undefined) {
+		this.event()._skillWaitCount = 0;
+	}
+	if (this.event()._skillWaitCount == 0) {
+		var e = this.event();
+		var eb = $gameTroop.aliveMembers()[0];
+		if (!!eb) {
+			var initfunc = function(proj, args) {
+				proj._damage = eb.atk;
+				proj._opposite = BattleManager.playerMember.bind(BattleManager);
+				proj._projectileName = eb.enemy().meta["ShootingProjectileImage"] || proj._projectileName;
+				proj.setPosition(e._realX-0.5, e._realY-0.5);
+				proj.setTarget({x: 8.5, y: 6.5}, 0.05);
+				if (!!args[0]) {
+					proj._vec.turn(args[0]);
+				}
+				proj._damage *= 0.5;
+				proj._checkNearmiss = true;
+
+			}
+			BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc);
+			if ($gameTroop.members()[0].hp <= 1000) {
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(20));
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(-20));
+			} 
+			if ($gameTroop.members()[0].hp <= 500) {
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(40));
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(-40));
+			}
+			e._skillWaitCount = 30;
+		}
+	} else {
+		this.event()._skillWaitCount--;
+	}
+}
+
+Game_Interpreter.prototype.commonstage5crystalattack2 = function() {
+	if (this.event()._skillWaitCount === undefined) {
+		this.event()._skillWaitCount = 0;
+	}
+	if (this.event()._skillWaitCount == 0) {
+		var e = this.event();
+		var eb = $gameTroop.aliveMembers()[0];
+		if (!!eb) {
+			var initfunc = function(proj, args) {
+				proj._damage = eb.atk;
+				proj._opposite = BattleManager.playerMember.bind(BattleManager);
+				proj._projectileName = eb.enemy().meta["ShootingProjectileImage"] || proj._projectileName;
+				proj.setPosition(e._realX-0.5, e._realY-0.5);
+				switch (e._bdirection) {
+					case 2:
+					proj._vec = new Kien.Vector2D(0.05,0);
+					break;
+					case 4:
+					proj._vec = new Kien.Vector2D(0,0.05);
+					break;
+					case 6:
+					proj._vec = new Kien.Vector2D(0,-0.05);
+					break;
+					case 8:
+					proj._vec = new Kien.Vector2D(-0.05,0);
+				}
+				if (!!args[0]) {
+					proj._vec.turn(args[0]);
+				}
+				proj._damage *= 0.5;
+				proj._checkNearmiss = true;
+
+			}
+			BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc);
+			if ($gameTroop.members()[1].hp <= 1000) {
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(20));
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(-20));
+			} 
+			if ($gameTroop.members()[1].hp <= 500) {
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(40));
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(-40));
+			}
+			e._skillWaitCount = 20;
+		}
+	} else {
+		this.event()._skillWaitCount--;
+	}
+}
+
+Game_Interpreter.prototype.commonstage5crystalattack3 = function() {
+	if (this.event()._skillWaitCount === undefined) {
+		this.event()._skillWaitCount = 0;
+	}
+	if (this.event()._skillWaitCount == 0) {
+		var e = this.event();
+		var eb = $gameTroop.aliveMembers()[0];
+		if (!!eb) {
+			var initfunc = function(proj, args) {
+				proj._damage = eb.atk;
+				proj._opposite = BattleManager.playerMember.bind(BattleManager);
+				proj._projectileName = eb.enemy().meta["ShootingProjectileImage"] || proj._projectileName;
+				proj.setPosition(e._realX-0.5, e._realY-0.5);
+				var spd = 0.4
+				if ($gameTroop.members()[2].hp <= 1000) {
+					spd = 0.45;
+				}
+				if ($gameTroop.members()[2].hp <= 500) {
+					spd = 0.5;
+				}
+				proj.setAngle(args[0], 0.04);
+				proj._damage *= 0.5;
+				proj._checkNearmiss = true;
+
+			}
+			var dif = 60;
+			if ($gameTroop.members()[2].hp <= 1000) {
+				dif = 30;
+			}
+			if ($gameTroop.members()[2].hp <= 500) {
+				dif = 10;
+			}
+			console.log(dif);
+			for (var ang = 0; ang <= 360; ang += dif) {
+				BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, Math.deg2Rad(ang));
+			}
+			e._skillWaitCount = 40;
+			if ($gameTroop.members()[2].hp <= 1000) {
+				e._skillWaitCount = 20;
+			}
+			if ($gameTroop.members()[2].hp <= 500) {
+				e._skillWaitCount = 10;
+			}
+		}
+	} else {
+		this.event()._skillWaitCount--;
+	}
+}
+
+Game_Interpreter.prototype.commonstage5crystalattack4 = function() {
+	if (this.event()._skillWaitCount === undefined) {
+		this.event()._skillWaitCount = 0;
+	}
+	if (this.event()._skillAngle === undefined) {
+		this.event()._skillAngle = 0;
+	}
+	if (this.event()._skillWaitCount == 0) {
+		var e = this.event();
+		var eb = $gameTroop.aliveMembers()[0];
+		if (!!eb) {
+			var initfunc = function(proj, args) {
+				proj.childFunc = function(proj, argss) {
+					proj._damage = this._damage * 0.5;
+					proj.setPosition(this.x, this.y);
+					proj._checkNearmiss = true;
+					proj.setAngle(argss[0], 0.05);
+					proj._projectileName = this._projectileName;
+					proj._opposite = this._opposite;
+				}.bind(proj);
+				proj._childAngle = args[0];
+				proj._damage = eb.atk;
+				proj._opposite = BattleManager.playerMember.bind(BattleManager);
+				proj._projectileName = eb.enemy().meta["ShootingProjectileImage"] || proj._projectileName;
+				proj.setPosition(e._realX-0.5, e._realY-0.5);
+				proj.setTarget({x: 8.5, y: 6.5}, 0.1);
+				proj._damage *= 0.5;
+				proj._checkNearmiss = true;
+				proj._owner = BattleManager.extra;
+       			proj.oldUpdateMovement = proj.updateMovement;
+        		proj.updateMovement = function() {
+		        	proj.oldUpdateMovement();
+		        	if (Kien.Vector2D.getDisplacementVector(this.x, this.y, 8.5, 6.5).magnitude <= 0.15) {
+		        		this._vec.setMagnitude(0);
+		        	}
+		        }.bind(proj);
+		        proj.onFinish = function() {
+		        	if (this._pierce == 0) {
+		        		return;
+		        	}
+		        	var dif = 30;
+					if ($gameTroop.members()[3].hp <= 1000) {
+						dif = 25;
+					}
+					if ($gameTroop.members()[3].hp <= 1000) {
+						dif = 20;
+					}
+		            for (var n = this._childAngle; n <= 360 + this._childAngle; n += dif) {
+		                this.addProjectile("Game_ShootingProjectileStraight", this.childFunc.bind(this), Math.deg2Rad(n), 0.1);
+		            }
+		        }.bind(proj);
+		        proj._pierce = 1;
+			}
+			BattleManager.extra.addProjectile("Game_ShootingProjectileStraight", initfunc, this.event()._skillAngle);
+			e._skillAngle = (e._skillAngle + 10) % 360;
+			e._skillWaitCount = 120;
+			if ($gameTroop.members()[3].hp <= 1000) {
+				e._skillWaitCount = 60;
+			}
+			if ($gameTroop.members()[3].hp <= 500) {
+				e._skillWaitCount = 30;
+			}
+		}
+	} else {
+		this.event()._skillWaitCount--;
+	}
+}
+
+
 
 BattleManager.setup = function(troopId, canEscape, canLose) {
 	Kien.ShootingRPG.BattleManager_setup.apply(this, arguments);
@@ -392,6 +701,8 @@ BattleManager.setup = function(troopId, canEscape, canLose) {
             this._shootingMap = new Game_Map();
         }
         this._shootingPlayer.refresh();
+        this._lastPixelMoveEnable = $gameSystem._pixelMoveEnabled;
+        $gameSystem._pixelMoveEnabled = true;
         DataManager._reservedGameMap = $gameMap;
         DataManager._reservedGamePlayer = $gamePlayer;
         DataManager._reservedMap = $dataMap;
@@ -450,6 +761,7 @@ Spriteset_Shooting.prototype.createUpperLayer = function() {
 
 Spriteset_Shooting.prototype.createWeaponNameSprite = function() {
 	this._weaponNameSprite = new Sprite_ShootingWeaponName();
-	this._weaponNameSprite.y = Graphics._height - this._weaponNameSprite.height;
+	this._weaponNameSprite.y = Graphics._height - this._weaponNameSprite.height - 48;
+	this._weaponNameSprite.x = 48;
 	this.addChild(this._weaponNameSprite);
 }
