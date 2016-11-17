@@ -210,7 +210,7 @@ if (!Math.deg2Rad) {
 
 if (!Math.rad2Deg) {
     Math.rad2Deg = function(radian) {
-        return ((((radian / Maht.pi) * 180) % 360 ) + 360) % 360;
+        return ((((radian / Math.PI) * 180) % 360 ) + 360) % 360;
     }
 }
 
@@ -518,7 +518,6 @@ BattleManager.removeSubEnemy = function(obj) {
         obj = obj.src;
     }
     var i = this.subEnemies.findIndex(function(o) {return o._src == obj});
-    console.log(this.subEnemies, i);
     if (i >= 0) {
         this.subEnemies.splice(i,1);
     }

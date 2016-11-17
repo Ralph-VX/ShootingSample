@@ -15,25 +15,14 @@ Kien.CharacterShake = {};
  * @help
  *
  * Plugin Command:
- *  CharacterShake power speed duration isVerticle event
+ *  CharacterShake power speed duration isVertical event
  *     power: power of the shake. Same as Event Command.
  *     speed: speed of the shake. Same as Event Command.
  *     duration: duration of the shake. Same as Event Command.
- *     isVerticle: 1 for verticle shake, 0 horizontal.
+ *     isVertical: 1 for vertical shake, 0 horizontal.
  *     event: Event ID of the event this command targeting. 0 for current, -1 for player.
  *       Let a specified character to shake. Use same algorithm as the Screen Shake event command.
  *
- *  CharacterClose duration iserticle event
- *  	duration: length it use to close.
- *  	isVerticle: 1 for close in verticle, 0 for horizontal.
- *  	event: Event ID of the event this command targeting. 0 for current, -1 for player.
- *  		perform a "closing" effect similar to the window closing. Will not reopen it until CharacterOpen manually performed.
- *  
- *  CharacterOpen duration iserticle event
- *  	duration: length it use to close.
- *  	isVerticle: 1 for close in verticle, 0 for horizontal.
- *  	event: Event ID of the event this command targeting. 0 for current, -1 for player.
- *  		perform a "closing" effect similar to the window closing. Will not reopen it until CharacterOpen manually performed.
 */
 
 //-----------------------------------------------------------------------------
@@ -59,18 +48,11 @@ Game_CharacterBase.prototype.kienStartShake = function(power, speed, dur, vert) 
 		power :power,
 		speed :power,
 		duration :dur,
-		verttical :vert,
+		vertical :vert,
 		shake: 0,
 		direction: 1
 	});
 }
-
-Game_CharacterBase.prototype.kienStartClose = function(dur, vert) {
-	this._kienEFfect.push({
-		type : "close",
-	})
-}
-
 
 //-----------------------------------------------------------------------------
 // Game_Interpreter
@@ -180,7 +162,7 @@ Sprite_Base.prototype.onEffectFinish = function(object) {
 
 Sprite_Character.prototype.updateEffect = function() {
 	this._kienEffect = this._kienEffect.concat(this._character._kienEffect);
-	this._character.kienClearShake();
+	this._character.kienClearEffect();
 	Sprite_Base.prototype.updateEffect.call(this);
 };
 
